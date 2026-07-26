@@ -88,17 +88,40 @@ public sealed class ArtistInsightsService
         var artistMbid = artist.GetProviderId(MetadataProvider.MusicBrainzArtist);
         if (configuration.EnableListenBrainzFallback && !string.IsNullOrWhiteSpace(artistMbid))
         {
+            // Release-group types from the artist-page JSON also improve the
+            // Albums/Singles split, so keep this cached lookup available even
+            // when the local chart is already full.
             listenBrainzData = await _listenBrainzClient.GetArtistDataAsync(
                 artistMbid,
                 TimeSpan.FromHours(Math.Clamp(configuration.ListenBrainzCacheHours, 1, 720)),
                 cancellationToken).ConfigureAwait(false);
-            if (localSongs.Count < Math.Max(1, configuration.MinimumLocalTracks))
+
+            // Local listening remains the primary chart. When it has fewer
+            // than the available Top Songs slots, append unique, locally
+            // playable ListenBrainz matches instead of replacing the ladder.
+            if (localSongs.Count < TopSongsFetchLimit)
             {
-                var externalSongs = GetListenBrainzSongs(listenBrainzData.PopularRecordings, tracks, currentUserData, TopSongsFetchLimit);
+                var localTrackIds = localSongs
+                    .Where(static song => song.ItemId.HasValue)
+                    .Select(static song => song.ItemId!.Value)
+                    .ToHashSet();
+                var localRecordingMbids = tracks
+                    .Where(track => localTrackIds.Contains(track.Id))
+                    .Select(track => track.GetProviderId(MetadataProvider.MusicBrainzRecording))
+                    .Where(static recordingMbid => !string.IsNullOrWhiteSpace(recordingMbid))
+                    .Cast<string>()
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var externalSongs = GetListenBrainzSongs(
+                    listenBrainzData.PopularRecordings,
+                    tracks,
+                    currentUserData,
+                    TopSongsFetchLimit - localSongs.Count,
+                    localTrackIds,
+                    localRecordingMbids);
                 if (externalSongs.Count > 0)
                 {
-                    topSongs = externalSongs;
-                    topSongsSource = "listenbrainz";
+                    topSongs = localSongs.Concat(externalSongs).Take(TopSongsFetchLimit).ToArray();
+                    topSongsSource = localSongs.Count > 0 ? "mixed" : "listenbrainz";
                 }
             }
         }
@@ -161,7 +184,9 @@ public sealed class ArtistInsightsService
         IReadOnlyList<ListenBrainzRecording> recordings,
         IReadOnlyList<Audio> localTracks,
         IReadOnlyDictionary<Guid, UserItemData> userData,
-        int limit)
+        int limit,
+        ISet<Guid>? excludedTrackIds = null,
+        ISet<string>? excludedRecordingMbids = null)
     {
         var localByRecordingMbid = localTracks
             .Select(track => new
@@ -173,6 +198,7 @@ public sealed class ArtistInsightsService
             .GroupBy(static item => item.RecordingMbid!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First().Track, StringComparer.OrdinalIgnoreCase);
 
+        var seenTrackIds = excludedTrackIds is null ? new HashSet<Guid>() : new HashSet<Guid>(excludedTrackIds);
         return recordings
             .Select(recording => new
             {
@@ -182,6 +208,11 @@ public sealed class ArtistInsightsService
             // Never show a remote-only recording: Top Songs is actionable and
             // every displayed row must be playable from this Jellyfin server.
             .Where(static item => item.LocalTrack is not null)
+            // A library can contain more than one Jellyfin item for the same
+            // MusicBrainz recording. Do not append a second copy of a song
+            // that is already part of the local ranking.
+            .Where(item => excludedRecordingMbids is null || !excludedRecordingMbids.Contains(item.Recording.RecordingMbid))
+            .Where(item => seenTrackIds.Add(item.LocalTrack!.Id))
             .Take(Math.Clamp(limit, 1, 50))
             .Select(item => ToListenBrainzSong(item.Recording, item.LocalTrack, userData))
             .ToArray();

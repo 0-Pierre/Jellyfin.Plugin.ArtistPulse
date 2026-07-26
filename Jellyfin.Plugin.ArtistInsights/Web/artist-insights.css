@@ -23,11 +23,44 @@
 
 /* Compact, three-column list modelled on Jellyfin's artist Top Songs view. */
 .artistInsightsTrackGrid {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(var(--artistInsightsTopSongsRows, 4), minmax(0, max-content));
     grid-auto-flow: column;
     column-gap: 1.2em;
+}
+
+/* Keep the three compact ladders legible without styling their rows. The
+   divider derives from the active Jellyfin/theme foreground colour instead
+   of imposing a plugin colour. */
+.artistInsightsTrackGrid[data-artist-insights-columns="2"]::before,
+.artistInsightsTrackGrid[data-artist-insights-columns="3"]::before,
+.artistInsightsTrackGrid[data-artist-insights-columns="3"]::after {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    top: .2em;
+    bottom: .2em;
+    border-inline-start: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+    pointer-events: none;
+}
+
+.artistInsightsTrackGrid[data-artist-insights-columns="2"]::before {
+    inset-inline-start: 50%;
+}
+
+.artistInsightsTrackGrid[data-artist-insights-columns="3"]::before {
+    inset-inline-start: 33.333%;
+}
+
+.artistInsightsTrackGrid[data-artist-insights-columns="3"]::after {
+    inset-inline-start: 66.666%;
+}
+
+.artistInsightsTrackGrid > * {
+    position: relative;
+    z-index: 1;
 }
 
 .artistInsightsTrack {
@@ -57,10 +90,11 @@
     background-size: cover;
 }
 
-.artistInsightsCoverFallback {
+.artistInsightsCover .artistInsightsCoverFallback {
+    position: absolute;
+    inset: 0;
+    margin: 0;
     display: flex;
-    width: 100%;
-    height: 100%;
     align-items: center;
     justify-content: center;
     font-size: 1.35em;
@@ -113,6 +147,14 @@
 .artistInsightsTopSongControls .artistInsightsShowMore,
 .artistInsightsTopSongControls .artistInsightsShowLess {
     margin: 0;
+}
+
+/* Some custom themes reset the browser's generic [hidden] rule. Keep this
+   scoped to the two Artist Pulse controls so Show less only appears after the
+   user expands the initial 12 tracks. */
+[data-artist-insights="top-songs"] .artistInsightsShowMore[hidden],
+[data-artist-insights="top-songs"] .artistInsightsShowLess[hidden] {
+    display: none !important;
 }
 
 .artistInsightsTrackHidden,

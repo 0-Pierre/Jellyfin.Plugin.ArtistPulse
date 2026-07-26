@@ -41,15 +41,10 @@
                         <div class="checkboxContainer checkboxContainer-withDescription">
                             <label class="emby-checkbox-label">
                                 <input id="EnableListenBrainzFallback" type="checkbox" is="emby-checkbox" />
-                                <span>Use ListenBrainz when local history is sparse</span>
+                                <span>Use ListenBrainz to complete local Top Songs</span>
                             </label>
                             <div class="fieldDescription">The external ranking is requested with the artist MusicBrainz ID. No Jellyfin account data is sent.</div>
                         </div>
-                    </div>
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="MinimumLocalTracks">Minimum distinct local tracks</label>
-                        <input id="MinimumLocalTracks" type="number" is="emby-input" min="1" max="100" />
-                        <div class="fieldDescription">Use the server-wide Jellyfin ranking only after this many different tracks have a play count.</div>
                     </div>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="ListenBrainzCacheHours">ListenBrainz cache (hours)</label>
@@ -76,7 +71,7 @@
                         ['Enabled', 'SplitSingles', 'EnableListenBrainzFallback'].forEach(function (key) {
                             document.querySelector('#' + key).checked = config[key];
                         });
-                        ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'MinimumLocalTracks', 'ListenBrainzCacheHours'].forEach(function (key) {
+                        ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'ListenBrainzCacheHours'].forEach(function (key) {
                             document.querySelector('#' + key).value = config[key];
                         });
                         Dashboard.hideLoadingMsg();
@@ -90,7 +85,7 @@
                     ['Enabled', 'SplitSingles', 'EnableListenBrainzFallback'].forEach(function (key) {
                         config[key] = document.querySelector('#' + key).checked;
                     });
-                    ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'MinimumLocalTracks', 'ListenBrainzCacheHours'].forEach(function (key) {
+                    ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'ListenBrainzCacheHours'].forEach(function (key) {
                         config[key] = Number(document.querySelector('#' + key).value);
                     });
                     ApiClient.updatePluginConfiguration(ArtistInsightsConfig.pluginUniqueId, config).then(function (result) {

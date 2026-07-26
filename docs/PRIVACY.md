@@ -8,7 +8,7 @@ The heart button is personal: Artist Pulse reads and updates favourite state onl
 
 ## ListenBrainz fallback
 
-When enabled and local history is sparse, the only outbound identifier is the artist's public MusicBrainz artist ID. Artist Pulse does **not** send:
+When enabled and a local chart has fewer than 50 tracks, the only outbound identifier is the artist's public MusicBrainz artist ID. Artist Pulse does **not** send:
 
 - Jellyfin users or authentication tokens;
 - library names or file paths;
@@ -26,4 +26,4 @@ All ListenBrainz requestsâ€”both the artist-page JSON POST and the API fallbackâ
 
 ## Control
 
-Disable **Use ListenBrainz when local history is sparse** in Artist Pulse settings to prevent all fallback network requests. Local Jellyfin ranking and Album/Single splitting continue to work.
+Disable **Use ListenBrainz to complete local Top Songs** in Artist Pulse settings to prevent all fallback network requests. Local Jellyfin ranking and Album/Single splitting continue to work.

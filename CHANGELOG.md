@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.2] - 2026-07-26
+
+- Fix Queue-only layout leakage when navigating there from an artist page.
+- Render Top Songs on the first cold artist navigation, then position it above Albums when available.
+- Keep retrying an already-fetched artist view while Jellyfin Web progressively creates its page sections, and retry a transient empty initial chart with bounded backoff, eliminating intermittent first-load omissions.
+- Preserve the complete server-wide Jellyfin chart first, then append only unique, locally playable ListenBrainz matches until the 50-track chart is full.
+- Add theme-derived divider lines between compact Top Songs columns.
+- Use Jellyfin's supported favourite endpoints and native favourite state classes.
+- Restore native MusicAlbum card markup and quick-play overlays for Singles/EPs.
+- Fix Single-card square geometry and restore its native title/year footer.
+- Keep Singles/EPs as an uninterrupted native card collection, without pagination controls.
+- Make hidden controls resilient to custom-theme `[hidden]` overrides.
+- Remove the decorative chevron from the Top Songs heading.
+
 All notable changes to Artist Pulse are documented here.
 
 ## [1.0.1] - 2026-07-26

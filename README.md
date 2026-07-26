@@ -25,12 +25,13 @@
 - **Never a dead row** — only tracks present and playable in the current Jellyfin library are displayed, including when fallback ranking is used.
 - **Albums + Singles/EPs** — short releases are moved out of Albums into their own native-card section.
 - **Theme-friendly UI** — Artist Pulse supplies layout only. Colours, hover effects, typography, cards, and fallback art inherit from Jellyfin Web and the user's theme.
+- **ElegantFin tested** — the artist sections have been verified with [ElegantFin](https://github.com/lscambo13/ElegantFin) and its [latest theme stylesheet](https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css).
 
 ## 🧠 How Top Songs are chosen
 
 1. **Local first (server-wide):** Artist Pulse aggregates Jellyfin `PlayCount` values across all local users for tracks visible to the current user. No local listening data leaves the server.
-2. **ListenBrainz when history is sparse:** if the configured minimum number of distinct locally played tracks is not reached across the server, Artist Pulse asks ListenBrainz for public artist popularity using only the artist's public MusicBrainz ID.
-3. **Local-library match required:** fallback recordings must match a local track by MusicBrainz recording ID. Remote-only songs are never shown.
+2. **ListenBrainz completes an incomplete chart:** when the local chart has fewer than 50 tracks, Artist Pulse asks ListenBrainz for public artist popularity using only the artist's public MusicBrainz ID. It appends only unique local matches after the complete local ranking; it never replaces or reorders local results.
+3. **Local-library match required:** fallback recordings must match a local track by MusicBrainz recording ID and must not already be in the local chart. Remote-only songs are never shown.
 4. **Safe fallback chain:** Artist Pulse uses ListenBrainz artist-page JSON first, then its documented popularity API, then a stale cached response if the service is temporarily unavailable.
 
 The result is useful on day one, and becomes more representative as Jellyfin server play history grows.
@@ -79,8 +80,7 @@ Detailed local, Docker, and manual-install instructions are in [docs/INSTALLATIO
 | Split Singles from Albums | On | Shows Singles/EPs in their own section. |
 | Single maximum track count | 3 | Part of the fallback heuristic for releases without type metadata. |
 | Single maximum duration | 30 minutes | Prevents long short-track albums being classified as singles. |
-| Use ListenBrainz when local history is sparse | On | Enables public popularity fallback. |
-| Minimum distinct local tracks | 3 | Number of distinct tracks with server-wide plays required before local ranking wins. |
+| Use ListenBrainz to complete local Top Songs | On | Appends unique, locally playable public-popularity matches after local ranked tracks when fewer than 50 tracks are available. |
 | ListenBrainz cache | 24 hours | Fresh-cache lifetime. Stale cache remains available during outages. |
 
 Top Songs always begins with 12 rows, then expands on demand. This guarantees a consistent artist-page layout for every user.

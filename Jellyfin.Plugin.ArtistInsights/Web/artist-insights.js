@@ -9,9 +9,13 @@
         currentArtistId: null,
         currentData: null,
         requestInFlight: false,
+        requestGeneration: 0,
         renderTimer: null,
         renderRetryTimer: null,
         renderRetryAttempts: 0,
+        emptyTopSongsRetryAttempts: 0,
+        emptyTopSongsRetryArtistId: null,
+        nextRequestNotBefore: 0,
         resizeTimer: null,
         activeSongId: null,
         initialTopSongs: 12,
@@ -28,7 +32,18 @@
             observer.observe(document.body, { childList: true, subtree: true });
             handler.bindPlaybackState();
             window.setInterval(handler.updatePlaybackButtons, 1000);
+            // Some Jellyfin themes and slow library pages populate artist
+            // sections after the normal DOM mutation burst has finished.
+            // Keep a lightweight safety check so an artist never needs F5.
+            window.setInterval(handler.ensureArtistRendered, 1000);
             handler.schedule();
+        },
+
+        ensureArtistRendered: function () {
+            var artistId = handler.getArtistId();
+            if (artistId && handler.currentArtistId === artistId && handler.currentData && handler.needsRender(handler.currentData)) {
+                handler.schedule();
+            }
         },
 
         schedule: function () {
@@ -40,13 +55,31 @@
             var artistId = handler.getArtistId();
             if (!artistId) {
                 handler.cancelRenderRetry();
+                handler.requestGeneration++;
                 handler.currentArtistId = null;
                 handler.currentData = null;
+                handler.emptyTopSongsRetryAttempts = 0;
+                handler.emptyTopSongsRetryArtistId = null;
+                handler.nextRequestNotBefore = 0;
+                // Jellyfin keeps detail DOM alive while changing views. Do
+                // not leak Artist Pulse content into the cached Queue view.
+                handler.removeArtistInsights();
                 return;
             }
 
-            if (handler.currentArtistId !== artistId) {
+            // Do not reset the bounded empty-response backoff below: it
+            // intentionally clears currentArtistId before retrying the same
+            // route. A real artist change (or an initial navigation) still
+            // gets a new request generation immediately.
+            if (handler.currentArtistId !== artistId &&
+                (handler.currentArtistId !== null ||
+                    !handler.nextRequestNotBefore ||
+                    handler.emptyTopSongsRetryArtistId !== artistId)) {
                 handler.cancelRenderRetry();
+                handler.requestGeneration++;
+                handler.emptyTopSongsRetryAttempts = 0;
+                handler.emptyTopSongsRetryArtistId = null;
+                handler.nextRequestNotBefore = 0;
             }
 
             if (handler.currentArtistId === artistId && handler.currentData) {
@@ -57,6 +90,16 @@
             }
 
             if (handler.requestInFlight) {
+                return;
+            }
+
+            // During the first Jellyfin Web boot, the authenticated request
+            // can occasionally race the initial client state and return an
+            // empty chart. Retry a few times with backoff rather than making
+            // the user refresh the page.
+            var waitForRetry = handler.nextRequestNotBefore - Date.now();
+            if (waitForRetry > 0) {
+                window.setTimeout(handler.process, waitForRetry);
                 return;
             }
 
@@ -72,21 +115,37 @@
             handler.requestInFlight = true;
             handler.currentArtistId = artistId;
             handler.currentData = null;
+            var requestGeneration = handler.requestGeneration;
             try {
                 Promise.resolve(window.ApiClient.ajax({
                     url: window.ApiClient.getUrl('ArtistInsights/artist/' + encodeURIComponent(artistId)),
                     type: 'GET',
                     dataType: 'json'
                 })).then(function (data) {
+                    if (requestGeneration !== handler.requestGeneration || handler.getArtistId() !== artistId) {
+                        return;
+                    }
                     handler.currentArtistId = artistId;
                     handler.currentData = handler.normaliseResponse(data);
                     handler.renderRetryAttempts = 0;
+                    if (!handler.currentData.topSongs.length && handler.emptyTopSongsRetryAttempts < 4) {
+                        handler.emptyTopSongsRetryAttempts++;
+                        handler.emptyTopSongsRetryArtistId = artistId;
+                        handler.currentArtistId = null;
+                        handler.currentData = null;
+                        handler.nextRequestNotBefore = Date.now() + (750 * Math.pow(2, handler.emptyTopSongsRetryAttempts - 1));
+                        return;
+                    }
+                    handler.emptyTopSongsRetryAttempts = 0;
+                    handler.emptyTopSongsRetryArtistId = null;
+                    handler.nextRequestNotBefore = 0;
                     handler.render(handler.currentData);
                 }).catch(function () {
                     // The endpoint returns 404 for any non-artist detail page. This is expected.
                     handler.currentData = null;
                 }).finally(function () {
                     handler.requestInFlight = false;
+                    handler.schedule();
                 });
             } catch (error) {
                 // A synchronous startup error must also release the lock so a
@@ -159,8 +218,12 @@
             var albumsSection = handler.sectionForTitle('Albums');
             if (!albumsSection) {
                 // Artist pages are progressively populated by Jellyfin Web.
-                // The data endpoint can win that race on a cold navigation, so
-                // retry briefly instead of requiring a second browser refresh.
+                // Render under Genres as soon as it exists, then move Top
+                // Songs above Albums when the album carousel arrives.
+                var genresSection = handler.sectionForTitle('Genres');
+                if (genresSection) {
+                    handler.renderTopSongs(data, handler.getArtistSectionContainer(genresSection), 'after');
+                }
                 handler.scheduleRenderRetry();
                 return;
             }
@@ -170,7 +233,7 @@
             // element. Insert independent Artist Pulse sections beside it so
             // that its album-card background cannot wrap our new sections.
             var albumsContainer = handler.getArtistSectionContainer(albumsSection);
-            handler.renderTopSongs(data, albumsContainer);
+            handler.renderTopSongs(data, albumsContainer, 'before');
             handler.renderSingles(data, albumsSection, albumsContainer);
         },
 
@@ -181,7 +244,7 @@
         },
 
         scheduleRenderRetry: function () {
-            if (handler.renderRetryTimer || handler.renderRetryAttempts >= 40) {
+            if (handler.renderRetryTimer || handler.renderRetryAttempts >= 240) {
                 return;
             }
 
@@ -201,8 +264,11 @@
             return !!(data.singles && data.singles.length && !document.querySelector('.artistInsightsSingles'));
         },
 
-        renderTopSongs: function (data, albumsContainer) {
+        renderTopSongs: function (data, anchorContainer, placement) {
             var existing = document.querySelector('.artistInsightsTopSongs');
+            if (existing && existing.getAttribute('data-artist-insights-placement') === placement) {
+                return;
+            }
             if (existing) {
                 existing.remove();
             }
@@ -214,12 +280,15 @@
             var section = document.createElement('div');
             section.className = 'artistInsightsTopSongs';
             section.setAttribute('data-artist-insights', 'top-songs');
+            section.setAttribute('data-artist-insights-placement', placement);
 
             var heading = document.createElement('div');
             heading.className = 'artistInsightsHeading';
-            heading.innerHTML = '<h2 class="sectionTitle">Top Songs <span class="material-icons artistInsightsHeadingIcon" aria-hidden="true">chevron_right</span></h2>';
+            heading.innerHTML = '<h2 class="sectionTitle">Top Songs</h2>';
             if (data.topSongsSource === 'listenbrainz') {
                 heading.title = 'Ranked by ListenBrainz; only tracks available on this server are shown.';
+            } else if (data.topSongsSource === 'mixed') {
+                heading.title = 'Local Jellyfin ranking, completed with unique ListenBrainz tracks available on this server.';
             }
             section.appendChild(heading);
 
@@ -274,7 +343,11 @@
                 section.appendChild(controls);
                 handler.updateTopSongsControls(showMore, showLess, grid);
             }
-            albumsContainer.parentNode.insertBefore(section, albumsContainer);
+            if (placement === 'after') {
+                anchorContainer.parentNode.insertBefore(section, anchorContainer.nextSibling);
+            } else {
+                anchorContainer.parentNode.insertBefore(section, anchorContainer);
+            }
         },
 
         updateTopSongsControls: function (showMore, showLess, grid) {
@@ -298,6 +371,7 @@
             }
 
             var columns = window.innerWidth <= 600 ? 1 : window.innerWidth <= 1000 ? 2 : 3;
+            grid.setAttribute('data-artist-insights-columns', String(columns));
             var visibleRows = Array.prototype.slice.call(grid.querySelectorAll('.artistInsightsTrack')).filter(function (row) {
                 return !row.hidden;
             }).length;
@@ -314,7 +388,7 @@
                 '<span class="artistInsightsRank" aria-label="Rank ' + rank + '">' + rank + '</span>' +
                 '<span class="artistInsightsCover cardImageContainer" aria-hidden="true"><span class="cardImageIcon material-icons album artistInsightsCoverFallback"></span><span class="material-icons artistInsightsPlaybackState play_arrow" hidden></span></span>' +
                 '<div class="artistInsightsTrackText"><span class="artistInsightsTrackName">' + handler.escapeHtml(song.name) + '</span><span class="artistInsightsAlbumName">' + handler.escapeHtml(song.album || '') + '</span></div>' +
-                '<button is="paper-icon-button-light" class="paper-icon-button-light artistInsightsFavourite btnUserData" type="button" title="Favourite" aria-label="Favourite"><span class="material-icons favorite_border" aria-hidden="true"></span></button>' +
+                '<button is="paper-icon-button-light" class="mediaButton paper-icon-button-light emby-button artistInsightsFavourite" type="button" data-likes="undefined" title="Add to favourites" aria-label="Add to favourites"><span class="material-icons favorite" aria-hidden="true"></span></button>' +
                 '<button is="paper-icon-button-light" class="paper-icon-button-light artistInsightsMore" type="button" title="More" aria-label="More"><span class="material-icons more_vert" aria-hidden="true"></span></button>';
 
             var cover = row.querySelector('.artistInsightsCover');
@@ -344,6 +418,13 @@
             }
             if (song.itemId) {
                 favouriteButton.setAttribute('data-favourite-item', song.itemId);
+                favouriteButton.setAttribute('data-id', song.itemId);
+                favouriteButton.setAttribute('data-itemtype', 'Audio');
+                favouriteButton.setAttribute('data-isfavorite', String(!!song.isFavorite));
+            }
+            var favouriteServerId = handler.getServerId();
+            if (favouriteServerId) {
+                favouriteButton.setAttribute('data-serverid', favouriteServerId);
             }
             row.addEventListener('click', function (event) {
                 if (!playable || event.target.closest('.artistInsightsFavourite, .artistInsightsMore')) {
@@ -359,6 +440,9 @@
                     handler.playSong(song.itemId);
                 }
             });
+            // Keep Jellyfin's native rating state classes while owning the
+            // request ourselves. The rating web component may asynchronously
+            // replace state after a click, so use the native icon-button host.
             favouriteButton.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -421,10 +505,7 @@
         },
 
         renderSingles: function (data, albumsSection, albumsContainer) {
-            document.querySelectorAll('.artistInsightsSingles').forEach(function (section) { section.remove(); });
-            document.querySelectorAll('.artistInsightsHiddenAlbum').forEach(function (card) {
-                card.classList.remove('artistInsightsHiddenAlbum');
-            });
+            handler.removeSingles();
 
             if (!data.singles || !data.singles.length) {
                 return;
@@ -448,6 +529,18 @@
             });
             section.appendChild(releases);
             albumsContainer.parentNode.insertBefore(section, albumsContainer.nextSibling);
+        },
+
+        removeSingles: function () {
+            document.querySelectorAll('.artistInsightsSingles').forEach(function (section) { section.remove(); });
+            document.querySelectorAll('.artistInsightsHiddenAlbum').forEach(function (card) {
+                card.classList.remove('artistInsightsHiddenAlbum');
+            });
+        },
+
+        removeArtistInsights: function () {
+            document.querySelectorAll('.artistInsightsTopSongs').forEach(function (section) { section.remove(); });
+            handler.removeSingles();
         },
 
         hideNativeSingleCards: function (albumsSection, singleIds) {
@@ -512,13 +605,14 @@
             padder.innerHTML = '<span class="cardImageIcon material-icons album" aria-hidden="true"></span>';
             var imageLink = document.createElement('a');
             imageLink.className = 'cardImageContainer coveredImage cardContent itemAction';
-            imageLink.href = '#/details?id=' + release.id;
+            imageLink.href = '#/details?id=' + release.id + (serverId ? '&serverId=' + serverId : '');
             imageLink.setAttribute('data-action', 'link');
             imageLink.setAttribute('data-id', release.id);
             imageLink.setAttribute('data-type', 'MusicAlbum');
             imageLink.setAttribute('data-mediatype', 'Audio');
             imageLink.setAttribute('data-isfolder', 'true');
             imageLink.setAttribute('aria-label', release.name || 'Album');
+            imageLink.setAttribute('role', 'img');
             if (serverId) {
                 imageLink.setAttribute('data-serverid', serverId);
             }
@@ -526,15 +620,68 @@
                 imageLink.style.backgroundImage = 'url("' + window.ApiClient.getUrl('Items/' + release.imageItemId + '/Images/Primary?fillHeight=300&fillWidth=300&quality=90') + '")';
             }
 
-            var footer = document.createElement('div');
-            footer.className = 'cardFooter cardFooter-transparent';
-            footer.innerHTML =
-                '<div class="cardText cardTextCentered cardText-first">' + handler.escapeHtml(release.name) + '</div>' +
-                '<div class="cardText cardTextCentered cardText-secondary">' + (release.year || '') + '</div>';
+            // Match the stock MusicAlbum card markup. In particular, the
+            // overlay lives inside cardScalable: themes use that relationship
+            // to show the native green/brand-coloured quick-play button.
+            var overlay = document.createElement('div');
+            overlay.className = 'cardOverlayContainer itemAction';
+            overlay.setAttribute('data-action', 'link');
+            var playButton = document.createElement('button');
+            playButton.setAttribute('is', 'paper-icon-button-light');
+            playButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
+            playButton.setAttribute('data-action', 'resume');
+            playButton.title = 'Play';
+            playButton.innerHTML = '<span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover play_arrow" aria-hidden="true"></span>';
+            playButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                handler.playRelease(release.id);
+            });
+            var overlayActions = document.createElement('div');
+            overlayActions.className = 'cardOverlayButton-br flex';
+            var favouriteButton = document.createElement('button');
+            favouriteButton.setAttribute('is', 'emby-ratingbutton');
+            favouriteButton.type = 'button';
+            favouriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+            favouriteButton.setAttribute('data-action', 'none');
+            favouriteButton.setAttribute('data-id', release.id);
+            favouriteButton.setAttribute('data-itemtype', 'MusicAlbum');
+            favouriteButton.setAttribute('data-likes', '');
+            favouriteButton.setAttribute('data-isfavorite', 'false');
+            favouriteButton.title = 'Add to favourites';
+            favouriteButton.innerHTML = '<span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite" aria-hidden="true"></span>';
+            var menuButton = document.createElement('button');
+            menuButton.setAttribute('is', 'paper-icon-button-light');
+            menuButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
+            menuButton.setAttribute('data-action', 'menu');
+            menuButton.title = 'More';
+            menuButton.innerHTML = '<span class="material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert" aria-hidden="true"></span>';
+            if (serverId) {
+                favouriteButton.setAttribute('data-serverid', serverId);
+            }
+            overlayActions.appendChild(favouriteButton);
+            overlayActions.appendChild(menuButton);
+            overlay.appendChild(playButton);
+            overlay.appendChild(overlayActions);
+
+            var title = document.createElement('div');
+            title.className = 'cardText cardTextCentered cardText-first';
+            var titleBdi = document.createElement('bdi');
+            // Keep this as native card text, rather than a textActionButton.
+            // Some themes style interactive title links as selected/editable.
+            titleBdi.textContent = release.name || 'Album';
+            title.appendChild(titleBdi);
+            var year = document.createElement('div');
+            year.className = 'cardText cardTextCentered cardText-secondary';
+            year.textContent = release.year || '';
             scalable.appendChild(padder);
             scalable.appendChild(imageLink);
+            scalable.appendChild(overlay);
             box.appendChild(scalable);
-            box.appendChild(footer);
+            // Native cards keep their title and secondary text beside the
+            // scalable cover layer; placing them inside it clips the text.
+            box.appendChild(title);
+            box.appendChild(year);
             card.appendChild(box);
             return card;
         },
@@ -735,6 +882,7 @@
                     return;
                 }
                 icon.className = 'material-icons artistInsightsPlaybackState ' + (isCurrent && state.isPlaying ? 'pause' : 'play_arrow');
+                icon.textContent = isCurrent && state.isPlaying ? 'pause' : 'play_arrow';
                 icon.hidden = !isCurrent;
                 row.classList.toggle('artistInsightsTrackPlaying', isCurrent && state.isPlaying);
             });
@@ -766,11 +914,11 @@
             var isFavorite = !button.classList.contains('isFavourite');
             button.setAttribute('data-updating', 'true');
             button.disabled = true;
-            window.ApiClient.getItem(userId, itemId).then(function (item) {
-                item.UserData = item.UserData || {};
-                item.UserData.IsFavorite = isFavorite;
-                return window.ApiClient.updateUserItemData(userId, itemId, item.UserData);
-            }).then(function () {
+            var endpoint = window.ApiClient.getUrl('Users/' + encodeURIComponent(userId) + '/FavoriteItems/' + encodeURIComponent(itemId));
+            Promise.resolve(window.ApiClient.ajax({
+                url: endpoint,
+                type: isFavorite ? 'POST' : 'DELETE'
+            })).then(function () {
                 handler.setFavouriteState(button, isFavorite);
                 handler.updateCachedFavourite(itemId, isFavorite);
             }).catch(function (error) {
@@ -781,15 +929,47 @@
             });
         },
 
+        playRelease: function (releaseId) {
+            var userId = window.ApiClient && typeof window.ApiClient.getCurrentUserId === 'function' ? window.ApiClient.getCurrentUserId() : null;
+            var playbackManager = handler.getPlaybackManager();
+            if (!releaseId || !userId || !playbackManager || typeof playbackManager.play !== 'function') {
+                console.warn('[Artist Pulse] Unable to start playback from a Single: Jellyfin playback manager is unavailable.');
+                return;
+            }
+
+            window.ApiClient.getItems(userId, {
+                ParentId: releaseId,
+                IncludeItemTypes: 'Audio',
+                Recursive: true,
+                SortBy: 'ParentIndexNumber,IndexNumber',
+                SortOrder: 'Ascending'
+            }).then(function (result) {
+                var items = (result.Items || []).filter(function (item) {
+                    return item && (item.Id || item.id);
+                });
+                if (!items.length) {
+                    throw new Error('This release has no playable tracks in the Jellyfin library.');
+                }
+                return playbackManager.play({ items: items, startIndex: 0 });
+            }).catch(function (error) {
+                console.warn('[Artist Pulse] Unable to start playback from a Single.', error);
+            });
+        },
+
         setFavouriteState: function (button, isFavorite) {
             button.classList.toggle('isFavourite', isFavorite);
-            button.classList.toggle('btnUserDataOn', isFavorite);
-            button.title = isFavorite ? 'Remove from favourites' : 'Add to favourites';
+            // Jellyfin themes conventionally target the American spelling;
+            // retain the original class for internal state compatibility.
+            button.classList.toggle('isFavorite', isFavorite);
+            button.classList.toggle('ratingbutton-withrating', isFavorite);
+            button.setAttribute('data-isfavorite', String(isFavorite));
+            button.title = isFavorite ? 'Favourite' : 'Add to favourites';
             button.setAttribute('aria-label', button.title);
             button.setAttribute('aria-pressed', String(isFavorite));
             var icon = button.querySelector('.material-icons');
             if (icon) {
-                icon.className = 'material-icons ' + (isFavorite ? 'favorite' : 'favorite_border');
+                icon.className = 'material-icons favorite' + (isFavorite ? ' ratingbutton-icon-withrating' : '');
+                icon.textContent = '';
             }
         },
 
@@ -806,19 +986,7 @@
         },
 
         toggleFavourite: function (button) {
-            var itemId = button.getAttribute('data-favourite-item');
-            var user = window.ApiClient && window.ApiClient._currentUser;
-            if (!itemId || !user) {
-                return;
-            }
-
-            window.ApiClient.getItem(user.Id, itemId).then(function (item) {
-                item.UserData = item.UserData || {};
-                item.UserData.IsFavorite = !button.classList.contains('isFavourite');
-                return window.ApiClient.updateUserItemData(user.Id, itemId, item.UserData);
-            }).then(function () {
-                button.classList.toggle('isFavourite');
-            });
+            handler.toggleNativeFavourite(button);
         },
 
         formatDuration: function (ticks) {

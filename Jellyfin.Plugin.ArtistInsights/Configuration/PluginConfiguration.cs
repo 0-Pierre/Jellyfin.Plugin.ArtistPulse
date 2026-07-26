@@ -14,7 +14,6 @@ public class PluginConfiguration : BasePluginConfiguration
     {
         Enabled = true;
         EnableListenBrainzFallback = true;
-        MinimumLocalTracks = 3;
         TopSongsLimit = 12;
         ListenBrainzCacheHours = 24;
         SplitSingles = true;
@@ -28,12 +27,14 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether ListenBrainz is used when local history is sparse.
+    /// Gets or sets a value indicating whether ListenBrainz completes local Top Songs.
     /// </summary>
     public bool EnableListenBrainzFallback { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of distinct locally played tracks required to prefer Jellyfin data.
+    /// Legacy setting retained so existing plugin configuration files can be read.
+    /// Artist Pulse always retains local ranking first and fills remaining
+    /// slots with unique, locally available ListenBrainz matches.
     /// </summary>
     public int MinimumLocalTracks { get; set; }
 
