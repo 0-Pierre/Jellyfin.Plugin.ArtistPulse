@@ -1,0 +1,153 @@
+/* Artist Pulse only provides layout. Native Jellyfin classes supply colours,
+   typography, hover states and theme-specific card treatment. */
+.artistInsightsTopSongs,
+.artistInsightsSingles {
+    margin-top: 1.5em;
+    margin-bottom: 1.75em;
+}
+
+.artistInsightsHeading {
+    display: flex;
+    align-items: center;
+    margin-bottom: .55em;
+}
+
+.artistInsightsHeading .sectionTitle {
+    margin: 0;
+}
+
+.artistInsightsHeadingIcon {
+    vertical-align: middle;
+    font-size: 1em;
+}
+
+/* Compact, three-column list modelled on Jellyfin's artist Top Songs view. */
+.artistInsightsTrackGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(var(--artistInsightsTopSongsRows, 4), minmax(0, max-content));
+    grid-auto-flow: column;
+    column-gap: 1.2em;
+}
+
+.artistInsightsTrack {
+    display: grid;
+    grid-template-columns: 1.1em 2.5em minmax(0, 1fr) 2em 2em;
+    align-items: center;
+    gap: .65em;
+    min-height: 3.45em;
+    padding: .25em 0;
+}
+
+.artistInsightsTrack[tabindex] {
+    cursor: pointer;
+}
+
+.artistInsightsRank {
+    font-size: .85em;
+    text-align: center;
+}
+
+.artistInsightsCover {
+    position: relative;
+    width: 2.5em;
+    height: 2.5em;
+    overflow: hidden;
+    background-position: center;
+    background-size: cover;
+}
+
+.artistInsightsCoverFallback {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35em;
+}
+
+.artistInsightsCover[style] .artistInsightsCoverFallback {
+    display: none;
+}
+
+.artistInsightsPlaybackState {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.artistInsightsPlaybackState[hidden] {
+    display: none;
+}
+
+.artistInsightsTrackText {
+    min-width: 0;
+}
+
+.artistInsightsTrackName,
+.artistInsightsAlbumName {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.artistInsightsAlbumName {
+    font-size: .82em;
+}
+
+.artistInsightsIconButton {
+    margin: 0;
+    padding: .2em;
+}
+
+.artistInsightsFavourite {
+    justify-self: end;
+}
+
+/* Use the active Jellyfin accent token so a liked song is distinct in every
+   compatible theme, including themes that set all light icon buttons white. */
+.artistInsightsFavourite.btnUserDataOn,
+.artistInsightsFavourite.isFavourite {
+    color: var(--theme-accent-color, #00a4dc) !important;
+}
+
+.artistInsightsMore {
+    justify-self: end;
+}
+
+.artistInsightsShowMore {
+    display: block;
+    margin: .9em auto 0;
+}
+
+.artistInsightsTrackHidden,
+.artistInsightsHiddenAlbum {
+    display: none !important;
+}
+
+@media (max-width: 1000px) {
+    .artistInsightsTrackGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .artistInsightsTrackGrid {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+        grid-auto-flow: row;
+    }
+
+    .artistInsightsTrack {
+        grid-template-columns: 1.1em 2.35em minmax(0, 1fr) 2em 2em;
+        gap: .5em;
+    }
+
+    .artistInsightsCover {
+        width: 2.35em;
+        height: 2.35em;
+    }
+}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Artist Pulse</title>
+</head>
+<body>
+    <div id="ArtistInsightsConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="ArtistInsightsConfigForm">
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Artist pages</h2>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="Enabled" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Artist Pulse in Jellyfin Web</span>
+                            </label>
+                            <div class="fieldDescription">Requires File Transformation. Restart Jellyfin and hard-refresh Jellyfin Web after enabling.</div>
+                        </div>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SplitSingles" type="checkbox" is="emby-checkbox" />
+                                <span>Split Singles from Albums</span>
+                            </label>
+                            <div class="fieldDescription">Tagged releases are preferred. Untagged releases use the short-release heuristic below.</div>
+                        </div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SingleMaxTrackCount">Single maximum track count</label>
+                        <input id="SingleMaxTrackCount" type="number" is="emby-input" min="1" max="20" />
+                        <div class="fieldDescription">Unlabelled releases at or below this number of tracks are treated as singles when they also meet the duration limit.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="SingleMaxDurationMinutes">Single maximum duration (minutes)</label>
+                        <input id="SingleMaxDurationMinutes" type="number" is="emby-input" min="1" max="120" />
+                        <div class="fieldDescription">Prevents long one- or two-track albums from being classified as singles.</div>
+                    </div>
+                    <div class="verticalSection">
+                        <h2 class="sectionTitle">Top songs</h2>
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="EnableListenBrainzFallback" type="checkbox" is="emby-checkbox" />
+                                <span>Use ListenBrainz when local history is sparse</span>
+                            </label>
+                            <div class="fieldDescription">The external ranking is requested with the artist MusicBrainz ID. No Jellyfin account data is sent.</div>
+                        </div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="MinimumLocalTracks">Minimum distinct local tracks</label>
+                        <input id="MinimumLocalTracks" type="number" is="emby-input" min="1" max="100" />
+                        <div class="fieldDescription">Use the Jellyfin ranking only after this many different tracks have a play count.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="ListenBrainzCacheHours">ListenBrainz cache (hours)</label>
+                        <input id="ListenBrainzCacheHours" type="number" is="emby-input" min="1" max="720" />
+                        <div class="fieldDescription">Cached JSON is retained on the server; stale cached data is used if ListenBrainz is temporarily unavailable.</div>
+                    </div>
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var ArtistInsightsConfig = {
+                pluginUniqueId: 'bf73dc01-12c1-4d5c-a6a9-1dd8f4cf97c4'
+            };
+
+            document.querySelector('#ArtistInsightsConfigPage')
+                .addEventListener('pageshow', function() {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(ArtistInsightsConfig.pluginUniqueId).then(function (config) {
+                        ['Enabled', 'SplitSingles', 'EnableListenBrainzFallback'].forEach(function (key) {
+                            document.querySelector('#' + key).checked = config[key];
+                        });
+                        ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'MinimumLocalTracks', 'ListenBrainzCacheHours'].forEach(function (key) {
+                            document.querySelector('#' + key).value = config[key];
+                        });
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#ArtistInsightsConfigForm')
+                .addEventListener('submit', function(e) {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(ArtistInsightsConfig.pluginUniqueId).then(function (config) {
+                    ['Enabled', 'SplitSingles', 'EnableListenBrainzFallback'].forEach(function (key) {
+                        config[key] = document.querySelector('#' + key).checked;
+                    });
+                    ['SingleMaxTrackCount', 'SingleMaxDurationMinutes', 'MinimumLocalTracks', 'ListenBrainzCacheHours'].forEach(function (key) {
+                        config[key] = Number(document.querySelector('#' + key).value);
+                    });
+                    ApiClient.updatePluginConfiguration(ArtistInsightsConfig.pluginUniqueId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
+                });
+
+                e.preventDefault();
+                return false;
+            });
+        </script>
+    </div>
+</body>
+</html>

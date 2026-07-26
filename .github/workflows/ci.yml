@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Artist Pulse
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Validate Web integration script
+        run: node --check Jellyfin.Plugin.ArtistInsights/Web/artist-insights.js
+
+      - name: Build release
+        run: dotnet build Jellyfin.Plugin.ArtistInsights.sln --configuration Release --nologo

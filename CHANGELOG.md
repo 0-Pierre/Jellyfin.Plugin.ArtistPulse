@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to Artist Pulse are documented here.
+
+## [1.0.0] - 2026-07-26
+
+### Added
+
+- Local-first, user-specific Top Songs for Jellyfin music artist pages.
+- Cached, rate-limited ListenBrainz fallback for sparse local history.
+- Local-library-only fallback matching: unavailable remote tracks are never displayed.
+- Compact 12-track initial view with ranked, top-to-bottom columns and Show more / Show less.
+- Whole-row ranked queue playback, native favourite state, item menus, and Jellyfin fallback artwork.
+- Separate Albums and Singles / EPs sections using native Jellyfin card styling.
+- File Transformation-based Web integration without modifying Jellyfin Web files on disk.
+
+### Notes
+
+- Initial public release of the standalone **Artist Pulse** repository.
