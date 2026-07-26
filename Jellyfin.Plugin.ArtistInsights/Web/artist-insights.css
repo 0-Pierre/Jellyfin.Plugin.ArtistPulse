@@ -32,7 +32,7 @@
 
 .artistInsightsTrack {
     display: grid;
-    grid-template-columns: 1.1em 2.5em minmax(0, 1fr) 2em 2em;
+    grid-template-columns: 1.1em 2.5em minmax(0, 1fr) 3em 3em;
     align-items: center;
     gap: .65em;
     min-height: 3.45em;
@@ -98,29 +98,21 @@
     font-size: .82em;
 }
 
-.artistInsightsIconButton {
-    margin: 0;
-    padding: .2em;
-}
-
-.artistInsightsFavourite {
-    justify-self: end;
-}
-
-/* Use the active Jellyfin accent token so a liked song is distinct in every
-   compatible theme, including themes that set all light icon buttons white. */
-.artistInsightsFavourite.btnUserDataOn,
-.artistInsightsFavourite.isFavourite {
-    color: var(--theme-accent-color, #00a4dc) !important;
-}
-
+.artistInsightsFavourite,
 .artistInsightsMore {
     justify-self: end;
 }
 
-.artistInsightsShowMore {
-    display: block;
+.artistInsightsTopSongControls {
+    display: flex;
+    justify-content: center;
+    gap: .65em;
     margin: .9em auto 0;
+}
+
+.artistInsightsTopSongControls .artistInsightsShowMore,
+.artistInsightsTopSongControls .artistInsightsShowLess {
+    margin: 0;
 }
 
 .artistInsightsTrackHidden,
@@ -142,7 +134,7 @@
     }
 
     .artistInsightsTrack {
-        grid-template-columns: 1.1em 2.35em minmax(0, 1fr) 2em 2em;
+        grid-template-columns: 1.1em 2.35em minmax(0, 1fr) 3em 3em;
         gap: .5em;
     }
 

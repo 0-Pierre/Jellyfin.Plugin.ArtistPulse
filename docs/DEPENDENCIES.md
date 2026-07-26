@@ -49,7 +49,7 @@ The local-first experience does not need MusicBrainz metadata. It is required fo
 - **Service:** <https://listenbrainz.org/>
 - **Popularity API documentation:** <https://listenbrainz.readthedocs.io/en/latest/users/api/popularity.html>
 
-ListenBrainz is used only when the signed-in user has too little local history. Artist Pulse first requests JSON from the public artist page, then falls back to ListenBrainz's documented Top Recordings by Artist API. No ListenBrainz account, token, or scrobbling configuration is needed.
+ListenBrainz is used only when the server-wide local chart has too few distinct played tracks. Artist Pulse first requests JSON from the public artist page, then falls back to ListenBrainz's documented Top Recordings by Artist API. No ListenBrainz account, token, or scrobbling configuration is needed.
 
 ## Client scope
 

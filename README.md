@@ -5,7 +5,7 @@
 <h1 align="center">🎵 Artist Pulse for Jellyfin</h1>
 
 <p align="center">
-  <strong>Private Top Songs, ranked playback queues, and smart Singles/EPs on Jellyfin artist pages.</strong>
+  <strong>Server-wide Top Songs, ranked playback queues, and smart Singles/EPs on Jellyfin artist pages.</strong>
 </p>
 
 <p align="center">
@@ -14,11 +14,11 @@
   <a href="https://github.com/jellyfin/jellyfin/releases"><img src="https://img.shields.io/badge/Jellyfin-10.11.x-00a4dc?style=flat-square" alt="Jellyfin 10.11.x" /></a>
 </p>
 
-> Jellyfin users have been asking for most-played tracks directly on artist pages for a long time. [Feature request #1228](https://features.jellyfin.org/posts/1228/add-most-played-tracks-to-artist-window) captures that missing music-page experience. **Artist Pulse solves it today as an opt-in plugin**: no core fork, no modified `jellyfin-web` files, and no external service required for personalised results.
+> Jellyfin users have been asking for most-played tracks directly on artist pages for a long time. [Feature request #1228](https://features.jellyfin.org/posts/1228/add-most-played-tracks-to-artist-window) captures that missing music-page experience. **Artist Pulse solves it today as an opt-in plugin**: no core fork, no modified `jellyfin-web` files, and no external service required for the local server-wide chart.
 
 ## ✨ What Artist Pulse adds
 
-- **Top Songs** — compact, ranked artist tracks based on the signed-in Jellyfin user's actual play counts.
+- **Top Songs** — compact, ranked artist tracks based on real **server-wide** Jellyfin play counts.
 - **One click → a ranked queue** — clicking a Top Song starts at that track, then naturally plays the following available Top Songs.
 - **Native interactions** — whole-row playback, current play/pause indicator, favourite state, and item actions use Jellyfin's own Web client APIs and classes.
 - **A focused first view** — exactly **12** compact tracks appear first. **Show more** reveals the next ranked tracks; **Show less** returns to 12. This is deliberately not a user-configurable setting.
@@ -28,12 +28,12 @@
 
 ## 🧠 How Top Songs are chosen
 
-1. **Local first (private):** Artist Pulse ranks the logged-in user's Jellyfin `PlayCount` for this artist. Nothing leaves the server.
-2. **ListenBrainz when history is sparse:** if the configured minimum number of distinct locally played tracks is not reached, Artist Pulse asks ListenBrainz for public artist popularity using only the artist's public MusicBrainz ID.
+1. **Local first (server-wide):** Artist Pulse aggregates Jellyfin `PlayCount` values across all local users for tracks visible to the current user. No local listening data leaves the server.
+2. **ListenBrainz when history is sparse:** if the configured minimum number of distinct locally played tracks is not reached across the server, Artist Pulse asks ListenBrainz for public artist popularity using only the artist's public MusicBrainz ID.
 3. **Local-library match required:** fallback recordings must match a local track by MusicBrainz recording ID. Remote-only songs are never shown.
 4. **Safe fallback chain:** Artist Pulse uses ListenBrainz artist-page JSON first, then its documented popularity API, then a stale cached response if the service is temporarily unavailable.
 
-The result is useful on day one, but becomes truly personal as Jellyfin play history grows.
+The result is useful on day one, and becomes more representative as Jellyfin server play history grows.
 
 ## ▶️ Ranked queue behaviour
 
@@ -80,7 +80,7 @@ Detailed local, Docker, and manual-install instructions are in [docs/INSTALLATIO
 | Single maximum track count | 3 | Part of the fallback heuristic for releases without type metadata. |
 | Single maximum duration | 30 minutes | Prevents long short-track albums being classified as singles. |
 | Use ListenBrainz when local history is sparse | On | Enables public popularity fallback. |
-| Minimum distinct local tracks | 3 | Number of distinct played tracks required before local ranking wins. |
+| Minimum distinct local tracks | 3 | Number of distinct tracks with server-wide plays required before local ranking wins. |
 | ListenBrainz cache | 24 hours | Fresh-cache lifetime. Stale cache remains available during outages. |
 
 Top Songs always begins with 12 rows, then expands on demand. This guarantees a consistent artist-page layout for every user.
@@ -89,7 +89,7 @@ Top Songs always begins with 12 rows, then expands on demand. This guarantees a 
 
 Artist Pulse is built around the fact that listening history is personal:
 
-- Jellyfin play counts and favourites stay on your server.
+- Jellyfin play counts and favourites stay on your server. Play counts are aggregated for the server-wide chart; favourite state remains personal to the signed-in user.
 - ListenBrainz receives only a public MusicBrainz artist ID—never a Jellyfin user, token, path, library name, or local play history.
 - Responses are cached on disk inside Jellyfin's plugin configuration area.
 - Both the artist-page JSON request and the documented popularity API share one process-wide request gate, with at least one second between remote requests.

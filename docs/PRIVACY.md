@@ -2,7 +2,9 @@
 
 ## Local data
 
-Artist Pulse reads the currently signed-in Jellyfin user's item data only to calculate local ranks and favourite state. It does not transmit this data and does not create a separate listening-history database.
+Artist Pulse aggregates local Jellyfin `PlayCount` values across server users to calculate the server-wide artist chart. It returns only a per-track total for items the signed-in user is allowed to see; it does not return names, individual play histories, or another user's favourite state.
+
+The heart button is personal: Artist Pulse reads and updates favourite state only for the signed-in user. It does not transmit local listening data and does not create a separate listening-history database.
 
 ## ListenBrainz fallback
 

@@ -2,6 +2,20 @@
 
 All notable changes to Artist Pulse are documented here.
 
+## [1.0.1] - 2026-07-26
+
+### Fixed
+
+- Artist pages now retry their staged DOM render automatically, removing the need for a manual browser refresh.
+- Favourite buttons use native Jellyfin classes and theme styling, with a centred native hover target.
+- Favourite updates are guarded against double clicks and immediately update the current artist response.
+
+### Changed
+
+- Local Top Songs now aggregate real Jellyfin play counts across all local users for tracks visible to the signed-in user.
+- Favourites remain private to the signed-in user.
+- **Show less** appears beside **Show more** after the first expansion; it no longer requires expanding the complete list.
+
 ## [1.0.0] - 2026-07-26
 
 ### Added

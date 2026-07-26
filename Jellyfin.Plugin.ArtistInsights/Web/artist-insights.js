@@ -10,6 +10,8 @@
         currentData: null,
         requestInFlight: false,
         renderTimer: null,
+        renderRetryTimer: null,
+        renderRetryAttempts: 0,
         resizeTimer: null,
         activeSongId: null,
         initialTopSongs: 12,
@@ -37,9 +39,14 @@
         process: function () {
             var artistId = handler.getArtistId();
             if (!artistId) {
+                handler.cancelRenderRetry();
                 handler.currentArtistId = null;
                 handler.currentData = null;
                 return;
+            }
+
+            if (handler.currentArtistId !== artistId) {
+                handler.cancelRenderRetry();
             }
 
             if (handler.currentArtistId === artistId && handler.currentData) {
@@ -73,6 +80,7 @@
                 })).then(function (data) {
                     handler.currentArtistId = artistId;
                     handler.currentData = handler.normaliseResponse(data);
+                    handler.renderRetryAttempts = 0;
                     handler.render(handler.currentData);
                 }).catch(function () {
                     // The endpoint returns 404 for any non-artist detail page. This is expected.
@@ -150,15 +158,40 @@
         render: function (data) {
             var albumsSection = handler.sectionForTitle('Albums');
             if (!albumsSection) {
+                // Artist pages are progressively populated by Jellyfin Web.
+                // The data endpoint can win that race on a cold navigation, so
+                // retry briefly instead of requiring a second browser refresh.
+                handler.scheduleRenderRetry();
                 return;
             }
 
+            handler.cancelRenderRetry();
             // Jellyfin Web wraps the stock Albums section in an anonymous
             // element. Insert independent Artist Pulse sections beside it so
             // that its album-card background cannot wrap our new sections.
             var albumsContainer = handler.getArtistSectionContainer(albumsSection);
             handler.renderTopSongs(data, albumsContainer);
             handler.renderSingles(data, albumsSection, albumsContainer);
+        },
+
+        cancelRenderRetry: function () {
+            window.clearTimeout(handler.renderRetryTimer);
+            handler.renderRetryTimer = null;
+            handler.renderRetryAttempts = 0;
+        },
+
+        scheduleRenderRetry: function () {
+            if (handler.renderRetryTimer || handler.renderRetryAttempts >= 40) {
+                return;
+            }
+
+            handler.renderRetryAttempts++;
+            handler.renderRetryTimer = window.setTimeout(function () {
+                handler.renderRetryTimer = null;
+                if (handler.currentData && handler.currentArtistId === handler.getArtistId()) {
+                    handler.render(handler.currentData);
+                }
+            }, 250);
         },
 
         needsRender: function (data) {
@@ -204,6 +237,8 @@
             section.appendChild(grid);
             handler.updateTopSongsGridLayout(grid);
             if (data.topSongs.length > handler.initialTopSongs) {
+                var controls = document.createElement('div');
+                controls.className = 'artistInsightsTopSongControls';
                 var showMore = document.createElement('button');
                 // Reuse Jellyfin's own button component instead of a plain
                 // browser button, so themes own its colour and focus style.
@@ -217,28 +252,37 @@
                             row.hidden = false;
                             row.classList.remove('artistInsightsTrackHidden');
                         });
-                    } else {
-                        Array.prototype.slice.call(grid.querySelectorAll('.artistInsightsTrack')).slice(handler.initialTopSongs).forEach(function (row) {
-                            row.hidden = true;
-                            row.classList.add('artistInsightsTrackHidden');
-                        });
                     }
                     handler.updateTopSongsGridLayout(grid);
-                    handler.updateShowMoreLabel(showMore, grid);
+                    handler.updateTopSongsControls(showMore, showLess, grid);
                 });
-                section.appendChild(showMore);
-                handler.updateShowMoreLabel(showMore, grid);
+                var showLess = document.createElement('button');
+                showLess.className = 'raised button-alt emby-button artistInsightsShowLess';
+                showLess.setAttribute('is', 'emby-button');
+                showLess.type = 'button';
+                showLess.textContent = 'Show less';
+                showLess.addEventListener('click', function () {
+                    Array.prototype.slice.call(grid.querySelectorAll('.artistInsightsTrack')).slice(handler.initialTopSongs).forEach(function (row) {
+                        row.hidden = true;
+                        row.classList.add('artistInsightsTrackHidden');
+                    });
+                    handler.updateTopSongsGridLayout(grid);
+                    handler.updateTopSongsControls(showMore, showLess, grid);
+                });
+                controls.appendChild(showMore);
+                controls.appendChild(showLess);
+                section.appendChild(controls);
+                handler.updateTopSongsControls(showMore, showLess, grid);
             }
             albumsContainer.parentNode.insertBefore(section, albumsContainer);
         },
 
-        updateShowMoreLabel: function (button, grid) {
+        updateTopSongsControls: function (showMore, showLess, grid) {
             var remaining = grid.querySelectorAll('.artistInsightsTrackHidden').length;
-            if (!remaining) {
-                button.textContent = 'Show less';
-                return;
-            }
-            button.textContent = 'Show more (' + remaining + ')';
+            var visible = grid.querySelectorAll('.artistInsightsTrack').length - remaining;
+            showMore.hidden = remaining === 0;
+            showLess.hidden = visible <= handler.initialTopSongs;
+            showMore.textContent = 'Show more (' + remaining + ')';
         },
 
         scheduleTopSongsLayout: function () {
@@ -270,8 +314,8 @@
                 '<span class="artistInsightsRank" aria-label="Rank ' + rank + '">' + rank + '</span>' +
                 '<span class="artistInsightsCover cardImageContainer" aria-hidden="true"><span class="cardImageIcon material-icons album artistInsightsCoverFallback"></span><span class="material-icons artistInsightsPlaybackState play_arrow" hidden></span></span>' +
                 '<div class="artistInsightsTrackText"><span class="artistInsightsTrackName">' + handler.escapeHtml(song.name) + '</span><span class="artistInsightsAlbumName">' + handler.escapeHtml(song.album || '') + '</span></div>' +
-                '<button class="paper-icon-button-light artistInsightsIconButton artistInsightsFavourite btnUserData" type="button" title="Favourite"><span class="material-icons favorite_border" aria-hidden="true"></span></button>' +
-                '<button class="paper-icon-button-light artistInsightsIconButton artistInsightsMore" type="button" title="More"><span class="material-icons more_vert" aria-hidden="true"></span></button>';
+                '<button is="paper-icon-button-light" class="paper-icon-button-light artistInsightsFavourite btnUserData" type="button" title="Favourite" aria-label="Favourite"><span class="material-icons favorite_border" aria-hidden="true"></span></button>' +
+                '<button is="paper-icon-button-light" class="paper-icon-button-light artistInsightsMore" type="button" title="More" aria-label="More"><span class="material-icons more_vert" aria-hidden="true"></span></button>';
 
             var cover = row.querySelector('.artistInsightsCover');
             var favouriteButton = row.querySelector('.artistInsightsFavourite');
@@ -284,9 +328,7 @@
                 cover.style.backgroundImage = 'url("' + image + '")';
             }
             favouriteButton.disabled = !song.itemId;
-            favouriteButton.classList.toggle('isFavourite', !!song.isFavorite);
-            favouriteButton.classList.toggle('btnUserDataOn', !!song.isFavorite);
-            favouriteButton.querySelector('.material-icons').className = 'material-icons ' + (song.isFavorite ? 'favorite' : 'favorite_border');
+            handler.setFavouriteState(favouriteButton, !!song.isFavorite);
             moreButton.disabled = !song.itemId;
 
             if (playable) {
@@ -718,19 +760,47 @@
         toggleNativeFavourite: function (button) {
             var itemId = button.getAttribute('data-favourite-item');
             var userId = window.ApiClient && typeof window.ApiClient.getCurrentUserId === 'function' ? window.ApiClient.getCurrentUserId() : null;
-            if (!itemId || !userId) {
+            if (!itemId || !userId || button.disabled || button.getAttribute('data-updating') === 'true') {
                 return;
             }
+            var isFavorite = !button.classList.contains('isFavourite');
+            button.setAttribute('data-updating', 'true');
+            button.disabled = true;
             window.ApiClient.getItem(userId, itemId).then(function (item) {
                 item.UserData = item.UserData || {};
-                item.UserData.IsFavorite = !button.classList.contains('isFavourite');
+                item.UserData.IsFavorite = isFavorite;
                 return window.ApiClient.updateUserItemData(userId, itemId, item.UserData);
             }).then(function () {
-                button.classList.toggle('isFavourite');
-                button.classList.toggle('btnUserDataOn');
-                var icon = button.querySelector('.material-icons');
-                if (icon) {
-                    icon.className = 'material-icons ' + (button.classList.contains('isFavourite') ? 'favorite' : 'favorite_border');
+                handler.setFavouriteState(button, isFavorite);
+                handler.updateCachedFavourite(itemId, isFavorite);
+            }).catch(function (error) {
+                console.warn('[Artist Pulse] Unable to update the favourite state.', error);
+            }).finally(function () {
+                button.removeAttribute('data-updating');
+                button.disabled = false;
+            });
+        },
+
+        setFavouriteState: function (button, isFavorite) {
+            button.classList.toggle('isFavourite', isFavorite);
+            button.classList.toggle('btnUserDataOn', isFavorite);
+            button.title = isFavorite ? 'Remove from favourites' : 'Add to favourites';
+            button.setAttribute('aria-label', button.title);
+            button.setAttribute('aria-pressed', String(isFavorite));
+            var icon = button.querySelector('.material-icons');
+            if (icon) {
+                icon.className = 'material-icons ' + (isFavorite ? 'favorite' : 'favorite_border');
+            }
+        },
+
+        updateCachedFavourite: function (itemId, isFavorite) {
+            if (!handler.currentData || !handler.currentData.topSongs) {
+                return;
+            }
+
+            handler.currentData.topSongs.forEach(function (song) {
+                if (song.itemId && song.itemId.toLowerCase() === itemId.toLowerCase()) {
+                    song.isFavorite = isFavorite;
                 }
             });
         },

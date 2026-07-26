@@ -1,7 +1,7 @@
 ---
 name: "Artist Pulse"
 guid: "bf73dc01-12c1-4d5c-a6a9-1dd8f4cf97c4"
-version: "1.0.0"
+version: "1.0.1"
 targetAbi: "10.11.11.0"
 framework: "net9.0"
 overview: "🎵 Top Songs, ranked playback queues, and smart Singles/EPs for Jellyfin artist pages."
@@ -15,5 +15,5 @@ owner: "0-Pierre"
 artifacts:
 - "Jellyfin.Plugin.ArtistInsights.dll"
 changelog: >
-  🎉 Initial public release: local-first Top Songs, compact ranked queues,
-  native favourite state, and smart Album / Singles & EPs sections.
+  ✨ Server-wide Jellyfin Top Songs, resilient first-page rendering, native
+  favourite controls, and immediate Show less.

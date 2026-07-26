@@ -31,7 +31,7 @@ public sealed class ArtistInsightsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the top songs and release classification for an artist, scoped to the authenticated user.
+    /// Gets server-wide Top Songs and release classification for an artist visible to the authenticated user.
     /// </summary>
     /// <param name="artistId">Jellyfin music artist id.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

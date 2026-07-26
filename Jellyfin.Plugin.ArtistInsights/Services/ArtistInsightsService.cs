@@ -10,7 +10,7 @@ using MediaBrowser.Model.Entities;
 namespace Jellyfin.Plugin.ArtistInsights.Services;
 
 /// <summary>
-/// Builds privacy-safe, per-user artist insight responses from the Jellyfin library.
+/// Builds server-wide artist insight responses from the Jellyfin library.
 /// </summary>
 public sealed class ArtistInsightsService
 {
@@ -20,6 +20,7 @@ public sealed class ArtistInsightsService
     private const int TopSongsFetchLimit = 50;
 
     private readonly ILibraryManager _libraryManager;
+    private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataManager;
     private readonly ListenBrainzClient _listenBrainzClient;
 
@@ -27,20 +28,23 @@ public sealed class ArtistInsightsService
     /// Initializes a new instance of the <see cref="ArtistInsightsService"/> class.
     /// </summary>
     /// <param name="libraryManager">Jellyfin library manager.</param>
+    /// <param name="userManager">Jellyfin user manager.</param>
     /// <param name="userDataManager">Jellyfin user-data manager.</param>
     /// <param name="listenBrainzClient">ListenBrainz data client.</param>
     public ArtistInsightsService(
         ILibraryManager libraryManager,
+        IUserManager userManager,
         IUserDataManager userDataManager,
         ListenBrainzClient listenBrainzClient)
     {
         _libraryManager = libraryManager;
+        _userManager = userManager;
         _userDataManager = userDataManager;
         _listenBrainzClient = listenBrainzClient;
     }
 
     /// <summary>
-    /// Builds the Top Songs, Albums, and Singles data for one artist and the current Jellyfin user.
+    /// Builds the Top Songs, Albums, and Singles data for one artist.
     /// </summary>
     /// <param name="artistId">Jellyfin music artist id.</param>
     /// <param name="user">Authenticated Jellyfin user.</param>
@@ -65,11 +69,18 @@ public sealed class ArtistInsightsService
             EnableTotalRecordCount = false
         }).OfType<Audio>().ToArray();
 
-        var userData = tracks
+        // Favourite state stays personal to the signed-in user. It must never
+        // expose another local user's activity.
+        var currentUserData = tracks
             .Select(track => new { Track = track, Data = _userDataManager.GetUserData(user, track) })
             .Where(static item => item.Data is not null)
             .ToDictionary(static item => item.Track.Id, static item => item.Data!);
-        var localSongs = GetLocalSongs(tracks, userData, TopSongsFetchLimit);
+
+        // The Top Songs chart itself is server-wide: real Jellyfin play counts
+        // are summed for all local users, but only for tracks visible to the
+        // current caller. The response contains totals, never per-user data.
+        var serverPlayCounts = GetServerPlayCounts(tracks);
+        var localSongs = GetLocalSongs(tracks, serverPlayCounts, currentUserData, TopSongsFetchLimit);
         var topSongsSource = "jellyfin";
         IReadOnlyList<TopSongDto> topSongs = localSongs;
 
@@ -83,7 +94,7 @@ public sealed class ArtistInsightsService
                 cancellationToken).ConfigureAwait(false);
             if (localSongs.Count < Math.Max(1, configuration.MinimumLocalTracks))
             {
-                var externalSongs = GetListenBrainzSongs(listenBrainzData.PopularRecordings, tracks, userData, TopSongsFetchLimit);
+                var externalSongs = GetListenBrainzSongs(listenBrainzData.PopularRecordings, tracks, currentUserData, TopSongsFetchLimit);
                 if (externalSongs.Count > 0)
                 {
                     topSongs = externalSongs;
@@ -107,23 +118,42 @@ public sealed class ArtistInsightsService
         };
     }
 
+    private IReadOnlyDictionary<Guid, long> GetServerPlayCounts(IReadOnlyList<Audio> tracks)
+    {
+        var playCounts = tracks.ToDictionary(static track => track.Id, static _ => 0L);
+        foreach (var localUser in _userManager.GetUsers())
+        {
+            foreach (var track in tracks)
+            {
+                var data = _userDataManager.GetUserData(localUser, track);
+                if (data is { PlayCount: > 0 })
+                {
+                    playCounts[track.Id] += data.PlayCount;
+                }
+            }
+        }
+
+        return playCounts;
+    }
+
     private static IReadOnlyList<TopSongDto> GetLocalSongs(
         IReadOnlyList<Audio> tracks,
-        IReadOnlyDictionary<Guid, UserItemData> userData,
+        IReadOnlyDictionary<Guid, long> serverPlayCounts,
+        IReadOnlyDictionary<Guid, UserItemData> currentUserData,
         int limit)
     {
         return tracks
             .Select(track => new
             {
                 Track = track,
-                Data = userData.GetValueOrDefault(track.Id)
+                PlayCount = serverPlayCounts.GetValueOrDefault(track.Id),
+                UserData = currentUserData.GetValueOrDefault(track.Id)
             })
-            .Where(static item => item.Data is { PlayCount: > 0 })
-            .OrderByDescending(static item => item.Data!.PlayCount)
-            .ThenByDescending(static item => item.Data!.LastPlayedDate)
+            .Where(static item => item.PlayCount > 0)
+            .OrderByDescending(static item => item.PlayCount)
             .ThenBy(static item => item.Track.SortName, StringComparer.OrdinalIgnoreCase)
             .Take(Math.Clamp(limit, 1, 50))
-            .Select(static item => ToLocalSong(item.Track, item.Data!))
+            .Select(static item => ToLocalSong(item.Track, item.PlayCount, item.UserData))
             .ToArray();
     }
 
@@ -157,7 +187,7 @@ public sealed class ArtistInsightsService
             .ToArray();
     }
 
-    private static TopSongDto ToLocalSong(Audio track, UserItemData userData)
+    private static TopSongDto ToLocalSong(Audio track, long playCount, UserItemData? currentUserData)
     {
         var album = track.AlbumEntity;
         return new TopSongDto
@@ -168,8 +198,8 @@ public sealed class ArtistInsightsService
             Name = track.Name,
             Album = track.Album,
             RunTimeTicks = track.RunTimeTicks,
-            ListenCount = userData.PlayCount,
-            IsFavorite = userData.IsFavorite,
+            ListenCount = playCount,
+            IsFavorite = currentUserData?.IsFavorite ?? false,
             CanPlay = true
         };
     }
