@@ -20,7 +20,7 @@ The fallback's public popularity information is matched back to the server's own
 
 ## Cache and throttling
 
-Responses are cached inside Jellyfin's plugin configuration directory. A fresh cache is used for the configured duration (24 hours by default). During an outage, the most recent stale cache remains eligible rather than making the artist page fail.
+Responses are cached inside Jellyfin's plugin configuration directory. A fresh cache is used for the configured duration (24 hours by default). During an outage, the most recent stale cache remains eligible rather than making the artist page fail. A partial remote response cannot replace an already cached set of popular recordings, release types, or Similar Artists.
 
 All ListenBrainz requests—the artist-page JSON POST plus the popularity and similar-artists API fallbacks—share one process-wide request gate. Artist Pulse spaces requests by at least one second and honours `Retry-After` for HTTP 429 responses. Without a server-provided retry period, it pauses new requests for one minute and serves stale cache where possible.
 

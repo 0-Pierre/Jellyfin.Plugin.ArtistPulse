@@ -79,6 +79,17 @@ public sealed partial class ListenBrainzClient
             // and similarArtists together. It also remains available when the
             // standalone popularity API is temporarily disabled under load.
             var pageData = await RequestArtistPageJsonAsync(artistMbid, cancellationToken).ConfigureAwait(false);
+            if (cached is { Data: { } staleData } &&
+                HasCachedData(staleData) &&
+                !HasCachedData(pageData))
+            {
+                // Do not make an artist page go blank while ListenBrainz is
+                // unavailable. A previous complete lookup is more useful than
+                // waiting through every fallback endpoint during an outage.
+                _logger.LogDebug("ListenBrainz artist-page lookup returned no data for artist {ArtistMbid}; serving stale cache.", artistMbid);
+                return staleData;
+            }
+
             var popularRecordings = pageData.PopularRecordings;
             if (popularRecordings.Count == 0)
             {
@@ -94,20 +105,27 @@ public sealed partial class ListenBrainzClient
                 similarArtistsFetched = fallback.Succeeded;
             }
 
-            var data = new ListenBrainzArtistData
+            var remoteData = new ListenBrainzArtistData
             {
                 PopularRecordings = popularRecordings,
                 ReleaseGroupTypes = pageData.ReleaseGroupTypes,
                 SimilarArtists = similarArtists,
                 SimilarArtistsFetched = similarArtistsFetched
             };
-            if (data.PopularRecordings.Count > 0 || data.ReleaseGroupTypes.Count > 0 || data.SimilarArtistsFetched)
+            var data = MergeWithCachedData(remoteData, cached?.Data);
+            if (HasCachedData(remoteData))
             {
                 await WriteCacheAsync(cachePath, data, cancellationToken).ConfigureAwait(false);
                 return data;
             }
 
-            return cached?.Data ?? new ListenBrainzArtistData();
+            if (cached is { Data: { } staleFallback } && HasCachedData(staleFallback))
+            {
+                _logger.LogDebug("ListenBrainz fallbacks returned no data for artist {ArtistMbid}; serving stale cache.", artistMbid);
+                return staleFallback;
+            }
+
+            return data;
         }
         finally
         {
@@ -491,6 +509,38 @@ public sealed partial class ListenBrainzClient
     }
 
     private string GetCachePath(string artistMbid) => Path.Combine(_cacheDirectory, artistMbid.ToLowerInvariant() + ".json");
+
+    private static bool HasCachedData(ListenBrainzArtistData data)
+        => data.PopularRecordings.Count > 0 ||
+           data.ReleaseGroupTypes.Count > 0 ||
+           data.SimilarArtistsFetched;
+
+    private static ListenBrainzArtistData MergeWithCachedData(
+        ListenBrainzArtistData remoteData,
+        ListenBrainzArtistData? cachedData)
+    {
+        if (cachedData is null)
+        {
+            return remoteData;
+        }
+
+        // A request can succeed for one ListenBrainz component while another
+        // endpoint is degraded. Preserve every last-known-good component
+        // instead of replacing a useful cache with an incomplete response.
+        return new ListenBrainzArtistData
+        {
+            PopularRecordings = remoteData.PopularRecordings.Count > 0
+                ? remoteData.PopularRecordings
+                : cachedData.PopularRecordings,
+            ReleaseGroupTypes = remoteData.ReleaseGroupTypes.Count > 0
+                ? remoteData.ReleaseGroupTypes
+                : cachedData.ReleaseGroupTypes,
+            SimilarArtists = remoteData.SimilarArtistsFetched
+                ? remoteData.SimilarArtists
+                : cachedData.SimilarArtists,
+            SimilarArtistsFetched = remoteData.SimilarArtistsFetched || cachedData.SimilarArtistsFetched
+        };
+    }
 
     private static bool IsFreshCache(CacheEntry? cached, TimeSpan cacheDuration)
         => cached is not null &&

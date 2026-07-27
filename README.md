@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/artist-pulse-preview.png" alt="Artist Pulse Top Songs, Albums, and playback queue in Jellyfin Web" width="100%" />
+  <img src="assets/artist-pulse-overview.png" alt="Artist Pulse Top Songs on an Alan Walker Jellyfin artist page" width="100%" />
 </p>
 
 <h1 align="center">🎵 Artist Pulse for Jellyfin</h1>
@@ -35,11 +35,23 @@
 3. **Local-library match required:** fallback recordings must match a local track by MusicBrainz recording ID and must not already be in the local chart. Remote-only songs are never shown.
 4. **Safe fallback chain:** Artist Pulse uses ListenBrainz artist-page JSON first, then its documented popularity API, then a stale cached response if the service is temporarily unavailable.
 
+## Complete releases
+
+Albums and Singles/EPs are separate, complete native-card sections. Artist Pulse never leaves a release collection behind a **More** button.
+
+<p align="center">
+  <img src="assets/artist-pulse-releases.png" alt="Artist Pulse renders complete Albums and Singles sections separately" width="100%" />
+</p>
+
 ## Similar Artists
 
 When ListenBrainz is enabled, Artist Pulse also adds up to 12 related artists at the bottom of an artist page. It requests ListenBrainz artist-page JSON first and falls back to its public artist-radio API. A recommendation is rendered only when its MusicBrainz artist ID exactly matches an artist in the visible Jellyfin library; every card opens that local artist and uses Jellyfin's existing primary image. Remote-only artists and remote artwork are never shown.
 
 The collection replaces Jellyfin Web's **More Like This** section for music artists. It uses a full-width circular carousel with previous/next controls, matching the Movie Cast & Crew experience while leaving the artist-page heading aligned with the music layout.
+
+<p align="center">
+  <img src="assets/artist-pulse-similar-artists.png" alt="Artist Pulse Similar Artists circular carousel" width="100%" />
+</p>
 
 The result is useful on day one, and becomes more representative as Jellyfin server play history grows.
 
@@ -99,6 +111,7 @@ Artist Pulse is built around the fact that listening history is personal:
 - Jellyfin play counts and favourites stay on your server. Play counts are aggregated for the server-wide chart; favourite state remains personal to the signed-in user.
 - ListenBrainz receives only a public MusicBrainz artist ID—never a Jellyfin user, token, path, library name, or local play history.
 - Responses are cached on disk inside Jellyfin's plugin configuration area.
+- A successful-but-partial ListenBrainz response never replaces a previously complete cache component; cached Top Songs and Similar Artists remain available during service outages.
 - Both the artist-page JSON request and the documented popularity API share one process-wide request gate, with at least one second between remote requests.
 - HTTP 429 responses honour `Retry-After` when present; otherwise Artist Pulse backs off for one minute and serves stale cache where possible.
 

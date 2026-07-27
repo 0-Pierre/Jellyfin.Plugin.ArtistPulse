@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.14] - 2026-07-27
+
+- Preserve each last-known-good ListenBrainz component when a subsequent lookup is partial or fails, so cached Top Songs, release types, and Similar Artists remain available during an outage.
+- Serve a useful stale cache immediately when the ListenBrainz artist-page request returns no data instead of walking every fallback endpoint first.
+- Refresh the README with current artist-page, Albums/Singles, and Similar Artists screenshots.
+
 ## [1.0.13] - 2026-07-27
 
 - Show the complete Albums and Singles/EPs collections directly on artist pages, replacing Jellyfin Web's Albums **More** control.

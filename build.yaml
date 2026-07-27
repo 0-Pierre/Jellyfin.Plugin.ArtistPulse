@@ -1,7 +1,7 @@
 ---
 name: "Artist Pulse"
 guid: "bf73dc01-12c1-4d5c-a6a9-1dd8f4cf97c4"
-version: "1.0.13"
+version: "1.0.14"
 targetAbi: "10.11.11.0"
 framework: "net9.0"
 overview: "Top Songs, complete Albums/Singles, and Similar Artists for Jellyfin artist pages."
@@ -16,6 +16,6 @@ owner: "0-Pierre"
 artifacts:
 - "Jellyfin.Plugin.ArtistInsights.dll"
 changelog: >
-  Complete Albums and Singles/EPs, local-only ListenBrainz Similar Artists in
-  a native circular carousel, native More Like This replacement, and refined
-  Top Songs Show more/Show less controls.
+  Preserve last-known-good ListenBrainz recordings, release types, and Similar
+  Artists during service outages; complete Albums/Singles and local-only
+  Similar Artists remain available in their native artist-page sections.
