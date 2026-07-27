@@ -10,12 +10,14 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.ArtistInsights.Services;
 
 /// <summary>
-/// Retrieves and caches artist popularity data from ListenBrainz.
+/// Retrieves and caches artist popularity and similarity data from ListenBrainz.
 /// </summary>
 public sealed partial class ListenBrainzClient
 {
     private const string ApiBaseUrl = "https://api.listenbrainz.org/1/popularity/top-recordings-for-artist/";
+    private const string SimilarArtistsApiBaseUrl = "https://api.listenbrainz.org/1/lb-radio/artist/";
     private const string ArtistPageBaseUrl = "https://listenbrainz.org/artist/";
+    private const int CacheFormatVersion = 4;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ArtistLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly SemaphoreSlim RemoteRequestGate = new(1, 1);
     private static readonly TimeSpan MinimumRemoteRequestInterval = TimeSpan.FromSeconds(1);
@@ -40,7 +42,7 @@ public sealed partial class ListenBrainzClient
     }
 
     /// <summary>
-    /// Gets popular recordings for an artist, using fresh cached data whenever possible.
+    /// Gets artist recordings, release types, and similar artists, using fresh cached data whenever possible.
     /// </summary>
     /// <param name="artistMbid">MusicBrainz artist id.</param>
     /// <param name="cacheDuration">How long a cached response remains fresh.</param>
@@ -58,9 +60,9 @@ public sealed partial class ListenBrainzClient
 
         var cachePath = GetCachePath(artistMbid);
         var cached = await ReadCacheAsync(cachePath, cancellationToken).ConfigureAwait(false);
-        if (cached is not null && DateTimeOffset.UtcNow - cached.FetchedAtUtc < cacheDuration)
+        if (cached is { } freshCache && IsFreshCache(freshCache, cacheDuration))
         {
-            return cached.Data;
+            return freshCache.Data;
         }
 
         var artistLock = ArtistLocks.GetOrAdd(artistMbid, static _ => new SemaphoreSlim(1, 1));
@@ -68,20 +70,38 @@ public sealed partial class ListenBrainzClient
         try
         {
             cached = await ReadCacheAsync(cachePath, cancellationToken).ConfigureAwait(false);
-            if (cached is not null && DateTimeOffset.UtcNow - cached.FetchedAtUtc < cacheDuration)
+            if (cached is { } refreshedCache && IsFreshCache(refreshedCache, cacheDuration))
             {
-                return cached.Data;
+                return refreshedCache.Data;
             }
 
-            // The artist-page POST returns popularRecordings and releaseGroups together. It also remains available
-            // when the standalone popularity API is temporarily disabled under load.
-            var data = await RequestArtistPageJsonAsync(artistMbid, cancellationToken).ConfigureAwait(false);
-            if (data.PopularRecordings.Count == 0)
+            // The artist-page POST returns popularRecordings, releaseGroups,
+            // and similarArtists together. It also remains available when the
+            // standalone popularity API is temporarily disabled under load.
+            var pageData = await RequestArtistPageJsonAsync(artistMbid, cancellationToken).ConfigureAwait(false);
+            var popularRecordings = pageData.PopularRecordings;
+            if (popularRecordings.Count == 0)
             {
-                data = await RequestApiAsync(artistMbid, cancellationToken).ConfigureAwait(false);
+                popularRecordings = (await RequestApiAsync(artistMbid, cancellationToken).ConfigureAwait(false)).PopularRecordings;
             }
 
-            if (data.PopularRecordings.Count > 0)
+            var similarArtists = pageData.SimilarArtists;
+            var similarArtistsFetched = pageData.SimilarArtistsFetched;
+            if (!similarArtistsFetched)
+            {
+                var fallback = await RequestSimilarArtistsApiAsync(artistMbid, cancellationToken).ConfigureAwait(false);
+                similarArtists = fallback.Artists;
+                similarArtistsFetched = fallback.Succeeded;
+            }
+
+            var data = new ListenBrainzArtistData
+            {
+                PopularRecordings = popularRecordings,
+                ReleaseGroupTypes = pageData.ReleaseGroupTypes,
+                SimilarArtists = similarArtists,
+                SimilarArtistsFetched = similarArtistsFetched
+            };
+            if (data.PopularRecordings.Count > 0 || data.ReleaseGroupTypes.Count > 0 || data.SimilarArtistsFetched)
             {
                 await WriteCacheAsync(cachePath, data, cancellationToken).ConfigureAwait(false);
                 return data;
@@ -122,6 +142,43 @@ public sealed partial class ListenBrainzClient
         }
     }
 
+    private async Task<SimilarArtistRequestResult> RequestSimilarArtistsApiAsync(string artistMbid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ListenBrainz's radio endpoint is the documented API fallback
+            // for artist similarity. Request only one representative recording
+            // per artist because the UI displays artists, not a radio queue.
+            var requestUri = SimilarArtistsApiBaseUrl + artistMbid +
+                "?mode=easy&max_similar_artists=24&max_recordings_per_artist=1&pop_begin=0&pop_end=100";
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            using var response = await SendRateLimitedAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("ListenBrainz similar-artists API returned {StatusCode} for artist {ArtistMbid}.", response.StatusCode, artistMbid);
+                return new SimilarArtistRequestResult([], false);
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var artists = ParseSimilarArtistsRadioJson(json, artistMbid);
+
+            // An empty radio map can be a transient degraded response. Do not
+            // mark it complete and lock the artist into an empty cache; the
+            // next request can retry the richer artist-page source.
+            return new SimilarArtistRequestResult(artists, artists.Count > 0);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogDebug(exception, "ListenBrainz similar-artists API request failed for artist {ArtistMbid}.", artistMbid);
+            return new SimilarArtistRequestResult([], false);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("ListenBrainz similar-artists API timed out for artist {ArtistMbid}.", artistMbid);
+            return new SimilarArtistRequestResult([], false);
+        }
+    }
+
     private async Task<ListenBrainzArtistData> RequestArtistPageJsonAsync(string artistMbid, CancellationToken cancellationToken)
     {
         try
@@ -136,7 +193,7 @@ public sealed partial class ListenBrainzClient
 
             var pageJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var pageData = ParseArtistPageJson(pageJson);
-            if (pageData.PopularRecordings.Count > 0)
+            if (pageData.PopularRecordings.Count > 0 || pageData.ReleaseGroupTypes.Count > 0 || pageData.SimilarArtistsFetched)
             {
                 return pageData;
             }
@@ -145,10 +202,12 @@ public sealed partial class ListenBrainzClient
             // so the fallback remains useful without relying on fragile rendered HTML.
             foreach (Match match in JsonScriptRegex().Matches(pageJson))
             {
-                var recordings = ParseRecordingsJson(match.Groups["json"].Value);
-                if (recordings.Count > 0)
+                var scriptData = ParseArtistPageJson(match.Groups["json"].Value);
+                if (scriptData.PopularRecordings.Count > 0 ||
+                    scriptData.ReleaseGroupTypes.Count > 0 ||
+                    scriptData.SimilarArtistsFetched)
                 {
-                    return new ListenBrainzArtistData { PopularRecordings = recordings };
+                    return scriptData;
                 }
             }
         }
@@ -238,7 +297,9 @@ public sealed partial class ListenBrainzClient
             return new ListenBrainzArtistData
             {
                 PopularRecordings = recordings,
-                ReleaseGroupTypes = releaseGroupTypes
+                ReleaseGroupTypes = releaseGroupTypes,
+                SimilarArtists = ParseSimilarArtists(document.RootElement),
+                SimilarArtistsFetched = HasSimilarArtistsData(document.RootElement)
             };
         }
         catch (JsonException)
@@ -274,6 +335,62 @@ public sealed partial class ListenBrainzClient
             .Cast<ListenBrainzRecording>()
             .OrderByDescending(static recording => recording.ListenCount)
             .ToArray();
+
+    private static IReadOnlyList<ListenBrainzSimilarArtist> ParseSimilarArtists(JsonElement root)
+    {
+        if (!HasSimilarArtistsData(root))
+        {
+            return [];
+        }
+
+        var artists = root.GetProperty("similarArtists").GetProperty("artists");
+
+        return artists
+            .EnumerateArray()
+            .Select(ToSimilarArtist)
+            .Where(static artist => artist is not null)
+            .Cast<ListenBrainzSimilarArtist>()
+            .GroupBy(static artist => artist.ArtistMbid, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderByDescending(static artist => artist.Score ?? 0)
+            .ToArray();
+    }
+
+    private static bool HasSimilarArtistsData(JsonElement root)
+        => root.ValueKind == JsonValueKind.Object &&
+           root.TryGetProperty("similarArtists", out var similarArtists) &&
+           similarArtists.ValueKind == JsonValueKind.Object &&
+           similarArtists.TryGetProperty("artists", out var artists) &&
+           artists.ValueKind == JsonValueKind.Array;
+
+    private static IReadOnlyList<ListenBrainzSimilarArtist> ParseSimilarArtistsRadioJson(string json, string seedArtistMbid)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return [];
+            }
+
+            return document.RootElement
+                .EnumerateObject()
+                .Where(property => !string.Equals(property.Name, seedArtistMbid, StringComparison.OrdinalIgnoreCase) &&
+                                   property.Value.ValueKind == JsonValueKind.Array)
+                .SelectMany(static property => property.Value.EnumerateArray())
+                .Select(ToSimilarArtist)
+                .Where(static artist => artist is not null)
+                .Cast<ListenBrainzSimilarArtist>()
+                .GroupBy(static artist => artist.ArtistMbid, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First())
+                .OrderByDescending(static artist => artist.ListenCount ?? 0)
+                .ToArray();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     private static JsonElement? FindRecordingArray(JsonElement element)
     {
@@ -336,6 +453,24 @@ public sealed partial class ListenBrainzClient
         };
     }
 
+    private static ListenBrainzSimilarArtist? ToSimilarArtist(JsonElement element)
+    {
+        var artistMbid = GetString(element, "artist_mbid") ?? GetString(element, "similar_artist_mbid");
+        var name = GetString(element, "name") ?? GetString(element, "similar_artist_name");
+        if (!Guid.TryParse(artistMbid, out _) || string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        return new ListenBrainzSimilarArtist
+        {
+            ArtistMbid = artistMbid,
+            Name = name,
+            Score = GetInt64(element, "score"),
+            ListenCount = GetInt64(element, "total_listen_count") ?? GetInt64(element, "listen_count")
+        };
+    }
+
     private static bool TryGetString(JsonElement element, string name, out string? value)
     {
         value = GetString(element, name);
@@ -356,6 +491,12 @@ public sealed partial class ListenBrainzClient
     }
 
     private string GetCachePath(string artistMbid) => Path.Combine(_cacheDirectory, artistMbid.ToLowerInvariant() + ".json");
+
+    private static bool IsFreshCache(CacheEntry? cached, TimeSpan cacheDuration)
+        => cached is not null &&
+           cached.FormatVersion >= CacheFormatVersion &&
+           cached.Data.SimilarArtistsFetched &&
+           DateTimeOffset.UtcNow - cached.FetchedAtUtc < cacheDuration;
 
     private async Task<CacheEntry?> ReadCacheAsync(string cachePath, CancellationToken cancellationToken)
     {
@@ -391,6 +532,7 @@ public sealed partial class ListenBrainzClient
             {
                 await JsonSerializer.SerializeAsync(stream, new CacheEntry
                 {
+                    FormatVersion = CacheFormatVersion,
                     FetchedAtUtc = DateTimeOffset.UtcNow,
                     Data = data
                 }, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -409,8 +551,12 @@ public sealed partial class ListenBrainzClient
 
     private sealed class CacheEntry
     {
+        public int FormatVersion { get; init; }
+
         public DateTimeOffset FetchedAtUtc { get; init; }
 
         public ListenBrainzArtistData Data { get; init; } = new();
     }
+
+    private sealed record SimilarArtistRequestResult(IReadOnlyList<ListenBrainzSimilarArtist> Artists, bool Succeeded);
 }

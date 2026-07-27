@@ -2,12 +2,23 @@
   {
     "guid": "bf73dc01-12c1-4d5c-a6a9-1dd8f4cf97c4",
     "name": "Artist Pulse",
-    "overview": "Top Songs, ranked playback queues, and smart Singles/EPs for Jellyfin artist pages.",
-    "description": "Artist Pulse adds local-first Top Songs and separate Singles/EPs to Jellyfin Web artist pages. It preserves server-wide Jellyfin ranks, then appends cached, rate-limited ListenBrainz matches that are available locally—never a remote-only track.",
+    "overview": "Top Songs, complete Albums/Singles, and Similar Artists for Jellyfin artist pages.",
+    "description": "Artist Pulse adds local-first Top Songs, complete Albums and Singles/EPs, and local-only ListenBrainz Similar Artists to Jellyfin Web artist pages. It preserves server-wide Jellyfin ranks, then appends cached, rate-limited ListenBrainz matches that are available locally—never remote-only tracks or artists.",
     "owner": "0-Pierre",
     "category": "Music",
     "imageUrl": "https://raw.githubusercontent.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/main/assets/artist-pulse-preview.png",
     "versions": [
+      {
+        "version": "1.0.13",
+        "changelog": "Complete Albums and Singles/EPs, local-only ListenBrainz Similar Artists in a native circular carousel, More Like This replacement, and refined Top Songs controls.",
+        "targetAbi": "10.11.11.0",
+        "sourceUrl": "https://github.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/releases/download/v1.0.13/ArtistPulse_1.0.13.zip",
+        "checksum": "B7B820D73C97F6762B1DCD85B2E560A4",
+        "timestamp": "2026-07-27T20:28:03Z",
+        "dependencies": [
+          "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
+        ]
+      },
       {
         "version": "1.0.2",
         "changelog": "Local-first Top Songs completion, resilient first-page rendering, native favourite controls, Album/Single fixes, and immediate Show less.",

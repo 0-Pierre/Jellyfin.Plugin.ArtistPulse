@@ -1,19 +1,21 @@
 ---
 name: "Artist Pulse"
 guid: "bf73dc01-12c1-4d5c-a6a9-1dd8f4cf97c4"
-version: "1.0.2"
+version: "1.0.13"
 targetAbi: "10.11.11.0"
 framework: "net9.0"
-overview: "Top Songs, ranked playback queues, and smart Singles/EPs for Jellyfin artist pages."
+overview: "Top Songs, complete Albums/Singles, and Similar Artists for Jellyfin artist pages."
 description: >
-  Brings a server-wide, local-first Top Songs section and a dedicated Singles
-  & EPs row to Jellyfin artist pages. A Top Songs click starts a ranked queue.
-  Uses local Jellyfin play counts first, then fills remaining slots with cached,
-  rate-limited ListenBrainz matches that are available on the server.
+  Brings a server-wide, local-first Top Songs section, complete Albums and
+  Singles/EPs collections, and ListenBrainz Similar Artists to Jellyfin artist
+  pages. A Top Songs click starts a ranked queue. Uses local Jellyfin play
+  counts first, then fills remaining slots with cached, rate-limited
+  ListenBrainz matches that are available on the server.
 category: "Music"
 owner: "0-Pierre"
 artifacts:
 - "Jellyfin.Plugin.ArtistInsights.dll"
 changelog: >
-  Local-first Top Songs completion, resilient first-page rendering, native
-  favourite controls, Album/Single fixes, and immediate Show less.
+  Complete Albums and Singles/EPs, local-only ListenBrainz Similar Artists in
+  a native circular carousel, native More Like This replacement, and refined
+  Top Songs Show more/Show less controls.

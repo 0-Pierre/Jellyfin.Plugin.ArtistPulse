@@ -185,7 +185,18 @@
                 return value[name.charAt(0).toUpperCase() + name.substring(1)];
             };
             var songs = property(response, 'topSongs') || [];
-            var releases = property(response, 'singles') || [];
+            var albums = property(response, 'albums') || [];
+            var singles = property(response, 'singles') || [];
+            var similarArtists = property(response, 'similarArtists') || [];
+            var normaliseRelease = function (release) {
+                return {
+                    id: property(release, 'id'),
+                    name: property(release, 'name'),
+                    year: property(release, 'year'),
+                    trackCount: property(release, 'trackCount'),
+                    imageItemId: property(release, 'imageItemId')
+                };
+            };
 
             return {
                 topSongsSource: property(response, 'topSongsSource') || '',
@@ -201,14 +212,13 @@
                         canPlay: property(song, 'canPlay')
                     };
                 }),
-                albums: property(response, 'albums') || [],
-                singles: releases.map(function (release) {
+                albums: albums.map(normaliseRelease),
+                singles: singles.map(normaliseRelease),
+                similarArtists: similarArtists.map(function (artist) {
                     return {
-                        id: property(release, 'id'),
-                        name: property(release, 'name'),
-                        year: property(release, 'year'),
-                        trackCount: property(release, 'trackCount'),
-                        imageItemId: property(release, 'imageItemId')
+                        name: property(artist, 'name'),
+                        itemId: property(artist, 'itemId'),
+                        imageItemId: property(artist, 'imageItemId')
                     };
                 })
             };
@@ -234,7 +244,10 @@
             // that its album-card background cannot wrap our new sections.
             var albumsContainer = handler.getArtistSectionContainer(albumsSection);
             handler.renderTopSongs(data, albumsContainer, 'before');
-            handler.renderSingles(data, albumsSection, albumsContainer);
+            handler.renderAlbums(data, albumsContainer);
+            handler.renderSingles(data, albumsContainer);
+            handler.renderSimilarArtists(data, albumsContainer);
+            handler.hideNativeMoreLikeThis();
         },
 
         cancelRenderRetry: function () {
@@ -261,7 +274,20 @@
             if (!document.querySelector('.artistInsightsTopSongs')) {
                 return true;
             }
-            return !!(data.singles && data.singles.length && !document.querySelector('.artistInsightsSingles'));
+            if (!document.querySelector('.artistInsightsNativeAlbums')) {
+                return true;
+            }
+            if (data.albums && data.albums.length && !document.querySelector('.artistInsightsAlbums')) {
+                return true;
+            }
+            if (data.singles && data.singles.length && !document.querySelector('.artistInsightsSingles')) {
+                return true;
+            }
+            if (data.similarArtists && data.similarArtists.length && !document.querySelector('.artistInsightsSimilarArtists')) {
+                return true;
+            }
+            var moreLikeThis = handler.sectionForTitle('More Like This');
+            return !!(moreLikeThis && !handler.getArtistSectionContainer(moreLikeThis).classList.contains('artistInsightsNativeMoreLikeThis'));
         },
 
         renderTopSongs: function (data, anchorContainer, placement) {
@@ -309,11 +335,12 @@
                 var controls = document.createElement('div');
                 controls.className = 'artistInsightsTopSongControls';
                 var showMore = document.createElement('button');
-                // Reuse Jellyfin's own button component instead of a plain
-                // browser button, so themes own its colour and focus style.
-                showMore.className = 'raised button-alt emby-button artistInsightsShowMore';
+                // Keep the native button element for theme-aware keyboard
+                // focus, but present it as a lightweight text action.
+                showMore.className = 'emby-button artistInsightsTextControl artistInsightsShowMore';
                 showMore.setAttribute('is', 'emby-button');
                 showMore.type = 'button';
+                showMore.innerHTML = '<span class="artistInsightsControlLabel"></span><span class="material-icons keyboard_arrow_down" aria-hidden="true"></span>';
                 showMore.addEventListener('click', function () {
                     var hiddenRows = Array.prototype.slice.call(grid.querySelectorAll('.artistInsightsTrackHidden'));
                     if (hiddenRows.length) {
@@ -326,10 +353,10 @@
                     handler.updateTopSongsControls(showMore, showLess, grid);
                 });
                 var showLess = document.createElement('button');
-                showLess.className = 'raised button-alt emby-button artistInsightsShowLess';
+                showLess.className = 'emby-button artistInsightsTextControl artistInsightsShowLess';
                 showLess.setAttribute('is', 'emby-button');
                 showLess.type = 'button';
-                showLess.textContent = 'Show less';
+                showLess.innerHTML = '<span class="artistInsightsControlLabel">Show less</span><span class="material-icons keyboard_arrow_up" aria-hidden="true"></span>';
                 showLess.addEventListener('click', function () {
                     Array.prototype.slice.call(grid.querySelectorAll('.artistInsightsTrack')).slice(handler.initialTopSongs).forEach(function (row) {
                         row.hidden = true;
@@ -355,7 +382,10 @@
             var visible = grid.querySelectorAll('.artistInsightsTrack').length - remaining;
             showMore.hidden = remaining === 0;
             showLess.hidden = visible <= handler.initialTopSongs;
-            showMore.textContent = 'Show more (' + remaining + ')';
+            var showMoreLabel = showMore.querySelector('.artistInsightsControlLabel');
+            if (showMoreLabel) {
+                showMoreLabel.textContent = 'Show more (' + remaining + ')';
+            }
         },
 
         scheduleTopSongsLayout: function () {
@@ -504,57 +534,172 @@
             return row;
         },
 
-        renderSingles: function (data, albumsSection, albumsContainer) {
+        renderAlbums: function (data, albumsContainer) {
+            handler.removeAlbums();
+            // Jellyfin caps its native artist carousel and exposes the rest
+            // behind a More button. Replace it with the complete release list
+            // supplied by the server so every album is visible immediately.
+            albumsContainer.classList.add('artistInsightsNativeAlbums');
+
+            if (!data.albums || !data.albums.length) {
+                return;
+            }
+
+            var section = document.createElement('div');
+            section.className = 'artistInsightsAlbums';
+            section.setAttribute('data-artist-insights', 'albums');
+            section.innerHTML = '<div class="artistInsightsHeading"><h2 class="sectionTitle">Albums</h2></div>';
+            section.appendChild(handler.createNativeReleaseCards(data.albums));
+            albumsContainer.parentNode.insertBefore(section, albumsContainer);
+        },
+
+        removeAlbums: function () {
+            document.querySelectorAll('.artistInsightsAlbums').forEach(function (section) { section.remove(); });
+            document.querySelectorAll('.artistInsightsNativeAlbums').forEach(function (section) {
+                section.classList.remove('artistInsightsNativeAlbums');
+            });
+        },
+
+        createNativeReleaseCards: function (releases) {
+            var container = document.createElement('div');
+            // Keep the markup native so every Jellyfin theme controls card
+            // size, spacing, colours, focus rings and hover behaviour.
+            container.className = 'itemsContainer vertical-wrap';
+            releases.forEach(function (release) {
+                container.appendChild(handler.createNativeReleaseCard(release));
+            });
+            return container;
+        },
+
+        renderSingles: function (data, albumsContainer) {
             handler.removeSingles();
 
             if (!data.singles || !data.singles.length) {
                 return;
             }
 
-            var singleIds = {};
-            data.singles.forEach(function (release) { singleIds[release.id.toLowerCase()] = true; });
-            handler.hideNativeSingleCards(albumsSection, singleIds);
-
             var section = document.createElement('div');
             section.className = 'artistInsightsSingles';
             section.setAttribute('data-artist-insights', 'singles');
             section.innerHTML = '<div class="artistInsightsHeading"><h2 class="sectionTitle">Singles</h2></div>';
-
-            var releases = document.createElement('div');
-            // Keep the markup native so every Jellyfin theme controls card
-            // size, spacing, colours, focus rings and hover behaviour.
-            releases.className = 'itemsContainer vertical-wrap';
-            data.singles.forEach(function (release) {
-                releases.appendChild(handler.createNativeReleaseCard(release));
-            });
-            section.appendChild(releases);
+            section.appendChild(handler.createNativeReleaseCards(data.singles));
             albumsContainer.parentNode.insertBefore(section, albumsContainer.nextSibling);
         },
 
         removeSingles: function () {
             document.querySelectorAll('.artistInsightsSingles').forEach(function (section) { section.remove(); });
-            document.querySelectorAll('.artistInsightsHiddenAlbum').forEach(function (card) {
-                card.classList.remove('artistInsightsHiddenAlbum');
-            });
         },
 
         removeArtistInsights: function () {
             document.querySelectorAll('.artistInsightsTopSongs').forEach(function (section) { section.remove(); });
+            handler.removeAlbums();
             handler.removeSingles();
+            handler.removeSimilarArtists();
+            document.querySelectorAll('.artistInsightsNativeMoreLikeThis').forEach(function (section) {
+                section.classList.remove('artistInsightsNativeMoreLikeThis');
+            });
         },
 
-        hideNativeSingleCards: function (albumsSection, singleIds) {
-            albumsSection.querySelectorAll('a[href*="id="]').forEach(function (anchor) {
-                var id = handler.getItemIdFromHref(anchor.getAttribute('href'));
-                if (!id || !singleIds[id.toLowerCase()]) {
+        hideNativeMoreLikeThis: function () {
+            var section = handler.sectionForTitle('More Like This');
+            if (section) {
+                handler.getArtistSectionContainer(section).classList.add('artistInsightsNativeMoreLikeThis');
+            }
+        },
+
+        renderSimilarArtists: function (data, albumsContainer) {
+            handler.removeSimilarArtists();
+
+            if (!data.similarArtists || !data.similarArtists.length) {
+                return;
+            }
+
+            var section = document.createElement('div');
+            // Match Jellyfin Web's Cast & Crew section exactly: the native
+            // carousel classes (rather than the portrait-card classes) are
+            // what make the cards form one horizontal, button-scrollable row.
+            section.className = 'verticalSection detailVerticalSection emby-scroller-container artistInsightsSimilarArtists';
+            section.setAttribute('data-artist-insights', 'similar-artists');
+            section.innerHTML = '<h2 class="sectionTitle sectionTitle-cards padded-right" title="Recommendations from ListenBrainz">Similar Artists</h2>';
+
+            var scrollButtons = document.createElement('div');
+            scrollButtons.setAttribute('is', 'emby-scrollbuttons');
+            scrollButtons.className = 'emby-scrollbuttons padded-right';
+
+            // Preserve Jellyfin Web's two-level Cast & Crew carousel. The
+            // outer emby-scroller applies the native person-card geometry;
+            // its inner emby-itemscontainer owns the horizontal animation.
+            var scroller = document.createElement('div');
+            scroller.setAttribute('is', 'emby-scroller');
+            scroller.className = 'padded-top-focusscale padded-bottom-focusscale no-padding emby-scroller artistInsightsSimilarArtistsScroller';
+            scroller.setAttribute('data-centerfocus', 'true');
+            scroller.setAttribute('data-scroll-mode-x', 'custom');
+
+            var artists = document.createElement('div');
+            artists.setAttribute('is', 'emby-itemscontainer');
+            // Deliberately use the stock movie-detail ID. Several Jellyfin
+            // themes style #castContent person cards as circular avatars.
+            // Artist pages do not have a Cast section, so the ID is unique.
+            artists.id = 'castContent';
+            artists.className = 'scrollSlider focuscontainer-x itemsContainer animatedScrollX';
+            data.similarArtists.forEach(function (artist) {
+                artists.appendChild(handler.createNativeSimilarArtistCard(artist));
+            });
+            section.appendChild(scrollButtons);
+            scroller.appendChild(artists);
+            section.appendChild(scroller);
+
+            // This is deliberately the final injected section. When Singles
+            // are enabled it follows them; otherwise it follows Albums.
+            var previous = document.querySelector('.artistInsightsSingles') || document.querySelector('.artistInsightsAlbums');
+            albumsContainer.parentNode.insertBefore(section, previous ? previous.nextSibling : albumsContainer.nextSibling);
+            handler.bindSimilarArtistScrollButtons(section, scrollButtons, artists);
+        },
+
+        removeSimilarArtists: function () {
+            document.querySelectorAll('.artistInsightsSimilarArtists').forEach(function (section) { section.remove(); });
+        },
+
+        bindSimilarArtistScrollButtons: function (section, scrollButtons, artists) {
+            var updateButtons = function () {
+                if (!section.isConnected) {
                     return;
                 }
 
-                var card = anchor.closest('.card');
-                if (card) {
-                    card.classList.add('artistInsightsHiddenAlbum');
+                var maxScrollLeft = Math.max(0, artists.scrollWidth - artists.clientWidth);
+                var hasOverflow = maxScrollLeft > 1;
+                scrollButtons.querySelectorAll('button[data-direction]').forEach(function (button) {
+                    var direction = button.getAttribute('data-direction');
+                    button.disabled = !hasOverflow ||
+                        (direction === 'left' ? artists.scrollLeft <= 1 : artists.scrollLeft >= maxScrollLeft - 1);
+                });
+            };
+
+            // Capture the dynamically created native buttons before their
+            // original handler. The browser scroll range above is reliable for
+            // content inserted after Jellyfin Web's page initialization.
+            scrollButtons.addEventListener('click', function (event) {
+                var target = event.target && event.target.closest ? event.target.closest('button[data-direction]') : null;
+                if (!target) {
+                    return;
                 }
-            });
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (!target.disabled) {
+                    var direction = target.getAttribute('data-direction');
+                    artists.scrollBy({
+                        left: (direction === 'right' ? 1 : -1) * Math.max(artists.clientWidth * .8, 220),
+                        behavior: 'smooth'
+                    });
+                }
+                window.setTimeout(updateButtons, 250);
+            }, true);
+            artists.addEventListener('scroll', updateButtons, { passive: true });
+
+            // emby-scrollbuttons creates its child buttons after this section
+            // is connected, so calculate their initial state on the next turn.
+            window.setTimeout(updateButtons, 0);
         },
 
         sectionForTitle: function (title) {
@@ -574,14 +719,6 @@
             // The stock artist page uses this unclassified parent as an album
             // card wrapper. Artist Pulse must be its sibling, not its child.
             return parent && !parent.className && parent.parentElement ? parent : section;
-        },
-
-        getItemIdFromHref: function (href) {
-            if (!href) {
-                return null;
-            }
-            var match = href.match(/[?&]id=([0-9a-f]{32}|[0-9a-f-]{36})/i);
-            return match ? match[1] : null;
         },
 
         createNativeReleaseCard: function (release) {
@@ -682,6 +819,55 @@
             // scalable cover layer; placing them inside it clips the text.
             box.appendChild(title);
             box.appendChild(year);
+            card.appendChild(box);
+            return card;
+        },
+
+        createNativeSimilarArtistCard: function (artist) {
+            var serverId = handler.getServerId();
+            var card = document.createElement('div');
+            card.className = 'card overflowPortraitCard personCard card-hoverable card-withuserdata artistInsightsSimilarArtistCard';
+            card.setAttribute('data-id', artist.itemId);
+            card.setAttribute('data-type', 'MusicArtist');
+            card.setAttribute('data-mediatype', 'Audio');
+            card.setAttribute('data-isfolder', 'true');
+            if (serverId) {
+                card.setAttribute('data-serverid', serverId);
+            }
+
+            var box = document.createElement('div');
+            box.className = 'cardBox cardBox-bottompadded';
+            var scalable = document.createElement('div');
+            scalable.className = 'cardScalable';
+            var padder = document.createElement('div');
+            padder.className = 'cardPadder cardPadder-overflowPortrait';
+            padder.innerHTML = '<span class="cardImageIcon material-icons person" aria-hidden="true"></span>';
+            var imageLink = document.createElement('a');
+            imageLink.className = 'cardImageContainer coveredImage cardContent itemAction';
+            imageLink.href = '#/details?id=' + artist.itemId + (serverId ? '&serverId=' + serverId : '');
+            imageLink.setAttribute('aria-label', artist.name || 'Artist');
+            imageLink.setAttribute('role', 'img');
+            imageLink.setAttribute('data-action', 'link');
+            imageLink.setAttribute('data-id', artist.itemId);
+            imageLink.setAttribute('data-type', 'MusicArtist');
+            imageLink.setAttribute('data-mediatype', 'Audio');
+            imageLink.setAttribute('data-isfolder', 'true');
+            if (serverId) {
+                imageLink.setAttribute('data-serverid', serverId);
+            }
+            if (artist.imageItemId) {
+                imageLink.style.backgroundImage = 'url("' + window.ApiClient.getUrl('Items/' + artist.imageItemId + '/Images/Primary?fillHeight=300&fillWidth=300&quality=90') + '")';
+            }
+
+            var title = document.createElement('div');
+            title.className = 'cardText cardTextCentered cardText-first';
+            var titleBdi = document.createElement('bdi');
+            titleBdi.textContent = artist.name || 'Artist';
+            title.appendChild(titleBdi);
+            scalable.appendChild(padder);
+            scalable.appendChild(imageLink);
+            box.appendChild(scalable);
+            box.appendChild(title);
             card.appendChild(box);
             return card;
         },

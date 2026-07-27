@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.13] - 2026-07-27
+
+- Show the complete Albums and Singles/EPs collections directly on artist pages, replacing Jellyfin Web's Albums **More** control.
+- Add a bottom-of-page Similar Artists collection from cached ListenBrainz artist-page JSON, with a documented artist-radio API fallback.
+- Match recommendations to local Jellyfin artists strictly by MusicBrainz artist ID so local cards retain their already-fetched primary images.
+- Do not treat a cache written during a failed Similar Artists lookup as fresh; the next artist navigation retries ListenBrainz instead of hiding matches for the full cache lifetime.
+- Match Similar Artists against the current user's complete Jellyfin MusicArtist list, avoiding provider-query omissions for virtual artist entries.
+- Replace Jellyfin's native **More Like This** section with a full-width, circular, Movie Cast & Crew-style Similar Artists carousel with working navigation controls.
+- Make Top Songs **Show more** and **Show less** compact text controls with down and up chevrons.
+
 ## [1.0.2] - 2026-07-26
 
 - Fix Queue-only layout leakage when navigating there from an artist page.

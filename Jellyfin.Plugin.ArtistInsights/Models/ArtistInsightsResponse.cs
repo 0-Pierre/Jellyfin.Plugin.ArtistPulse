@@ -24,6 +24,11 @@ public sealed class ArtistInsightsResponse
     /// Gets or sets releases shown in the dedicated Singles section.
     /// </summary>
     public required IReadOnlyList<ReleaseDto> Singles { get; init; }
+
+    /// <summary>
+    /// Gets or sets ListenBrainz similar-artist recommendations, enriched with matching local artists.
+    /// </summary>
+    public required IReadOnlyList<SimilarArtistDto> SimilarArtists { get; init; }
 }
 
 /// <summary>
@@ -101,4 +106,25 @@ public sealed class ReleaseDto
     /// Gets or sets the number of tracks in the release.
     /// </summary>
     public int TrackCount { get; init; }
+}
+
+/// <summary>
+/// A ListenBrainz similar-artist recommendation shown on an artist page.
+/// </summary>
+public sealed class SimilarArtistDto
+{
+    /// <summary>
+    /// Gets or sets the display name of the matching local Jellyfin artist.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Gets or sets the matching local Jellyfin artist id visible to the current user.
+    /// </summary>
+    public Guid ItemId { get; init; }
+
+    /// <summary>
+    /// Gets or sets the local artist item that supplies a primary image, when available.
+    /// </summary>
+    public Guid? ImageItemId { get; init; }
 }

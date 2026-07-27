@@ -18,6 +18,7 @@ public sealed class ArtistInsightsService
     // remaining server-ranked rows on demand. Keep the endpoint bounded while
     // allowing Show more to work without another request.
     private const int TopSongsFetchLimit = 50;
+    private const int SimilarArtistsLimit = 12;
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
@@ -44,7 +45,7 @@ public sealed class ArtistInsightsService
     }
 
     /// <summary>
-    /// Builds the Top Songs, Albums, and Singles data for one artist.
+    /// Builds the Top Songs, Albums, Singles, and Similar Artists data for one artist.
     /// </summary>
     /// <param name="artistId">Jellyfin music artist id.</param>
     /// <param name="user">Authenticated Jellyfin user.</param>
@@ -137,8 +138,72 @@ public sealed class ArtistInsightsService
             TopSongs = topSongs,
             TopSongsSource = topSongsSource,
             Albums = releases.Albums,
-            Singles = releases.Singles
+            Singles = releases.Singles,
+            SimilarArtists = GetSimilarArtists(listenBrainzData?.SimilarArtists, artist.Id, user)
         };
+    }
+
+    private IReadOnlyList<SimilarArtistDto> GetSimilarArtists(
+        IReadOnlyList<ListenBrainzSimilarArtist>? recommendations,
+        Guid currentArtistId,
+        User user)
+    {
+        if (recommendations is null || recommendations.Count == 0)
+        {
+            return [];
+        }
+
+        // Jellyfin's provider-ID query can omit virtual MusicArtist entries
+        // on some library layouts even though their detail pages expose the
+        // MBID. Build the index from the caller-visible artist list instead,
+        // then match in memory against the same IDs shown by Jellyfin Web.
+        var localArtistsByMbid = _libraryManager.GetItemList(new InternalItemsQuery(user)
+        {
+            IncludeItemTypes = [BaseItemKind.MusicArtist],
+            // Music artists generated from track metadata can be virtual
+            // "items by name". They are resolvable by ID in Jellyfin Web, but
+            // are excluded from an unrestricted library query unless this is
+            // explicitly enabled.
+            IncludeItemsByName = true,
+            Recursive = true,
+            EnableTotalRecordCount = false
+        }).OfType<MusicArtist>()
+            .Select(localArtist => new
+            {
+                Artist = localArtist,
+                MusicBrainzArtistId = localArtist.GetProviderId(MetadataProvider.MusicBrainzArtist)
+            })
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry.MusicBrainzArtistId))
+            .GroupBy(static entry => entry.MusicBrainzArtistId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First().Artist, StringComparer.OrdinalIgnoreCase);
+
+        var localRecommendations = new List<SimilarArtistDto>();
+        foreach (var recommendation in recommendations.Where(static candidate => Guid.TryParse(candidate.ArtistMbid, out _)))
+        {
+            if (localRecommendations.Count == SimilarArtistsLimit)
+            {
+                break;
+            }
+
+            // Match strictly on MBID, never artist name: this lets the UI
+            // reuse the right local profile image without conflating artists
+            // that share a name. Remote-only recommendations are intentionally
+            // omitted, so every card is a Jellyfin artist-page navigation.
+            if (!localArtistsByMbid.TryGetValue(recommendation.ArtistMbid, out var localArtist) ||
+                localArtist.Id == currentArtistId)
+            {
+                continue;
+            }
+
+            localRecommendations.Add(new SimilarArtistDto
+            {
+                Name = localArtist.Name,
+                ItemId = localArtist.Id,
+                ImageItemId = localArtist.HasImage(ImageType.Primary) ? localArtist.Id : null
+            });
+        }
+
+        return localRecommendations;
     }
 
     private IReadOnlyDictionary<Guid, long> GetServerPlayCounts(IReadOnlyList<Audio> tracks)

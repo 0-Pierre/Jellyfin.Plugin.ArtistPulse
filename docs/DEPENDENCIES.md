@@ -28,7 +28,7 @@ Jellyfin plugins are ABI-sensitive. Install an Artist Pulse release that explici
 
 Artist Pulse registers a non-destructive transformation for Jellyfin Web's served `index.html`. File Transformation injects the plugin stylesheet and script on the server response; Artist Pulse never edits `jellyfin-web` files on disk.
 
-This is a hard dependency for the browser interface. The REST endpoint can still return data without it, but Top Songs and Singles will not appear in Jellyfin Web.
+This is a hard dependency for the browser interface. The REST endpoint can still return data without it, but Top Songs, Albums, Singles, and Similar Artists will not appear in Jellyfin Web.
 
 ## Optional, recommended metadata
 
@@ -49,7 +49,7 @@ The local-first experience does not need MusicBrainz metadata. It is required fo
 - **Service:** <https://listenbrainz.org/>
 - **Popularity API documentation:** <https://listenbrainz.readthedocs.io/en/latest/users/api/popularity.html>
 
-When the server-wide local chart contains fewer than 50 tracks, ListenBrainz is used to append unique, locally playable matches after the local ranking. It never replaces or reorders local results. Artist Pulse first requests JSON from the public artist page, then falls back to ListenBrainz's documented Top Recordings by Artist API. No ListenBrainz account, token, or scrobbling configuration is needed.
+When the server-wide local chart contains fewer than 50 tracks, ListenBrainz is used to append unique, locally playable matches after the local ranking. It never replaces or reorders local results. Artist Pulse also displays its similar-artist recommendations and reuses local artist cards when their MusicBrainz IDs match. It first requests JSON from the public artist page, then falls back to ListenBrainz's documented Top Recordings by Artist and artist-radio APIs. No ListenBrainz account, token, or scrobbling configuration is needed.
 
 ## Client scope
 

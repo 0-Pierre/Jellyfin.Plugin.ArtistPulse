@@ -5,7 +5,7 @@
 <h1 align="center">🎵 Artist Pulse for Jellyfin</h1>
 
 <p align="center">
-  <strong>Server-wide Top Songs, ranked playback queues, and smart Singles/EPs on Jellyfin artist pages.</strong>
+  <strong>Server-wide Top Songs, complete releases, and local Similar Artists on Jellyfin artist pages.</strong>
 </p>
 
 <p align="center">
@@ -23,7 +23,8 @@
 - **Native interactions** — whole-row playback, current play/pause indicator, favourite state, and item actions use Jellyfin's own Web client APIs and classes.
 - **A focused first view** — exactly **12** compact tracks appear first. **Show more** reveals the next ranked tracks; **Show less** returns to 12. This is deliberately not a user-configurable setting.
 - **Never a dead row** — only tracks present and playable in the current Jellyfin library are displayed, including when fallback ranking is used.
-- **Albums + Singles/EPs** — short releases are moved out of Albums into their own native-card section.
+- **Complete Albums + Singles/EPs** — every release is shown immediately in native-card sections, without an Albums or Singles **More** button.
+- **Similar Artists** — ListenBrainz recommendations appear at the bottom only when they exactly match a local Jellyfin artist by MusicBrainz ID. They reuse the local primary image, open the Jellyfin artist page, and display in a full-width circular carousel like Movie Cast & Crew.
 - **Theme-friendly UI** — Artist Pulse supplies layout only. Colours, hover effects, typography, cards, and fallback art inherit from Jellyfin Web and the user's theme.
 - **ElegantFin tested** — the artist sections have been verified with [ElegantFin](https://github.com/lscambo13/ElegantFin) and its [latest theme stylesheet](https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css).
 
@@ -33,6 +34,12 @@
 2. **ListenBrainz completes an incomplete chart:** when the local chart has fewer than 50 tracks, Artist Pulse asks ListenBrainz for public artist popularity using only the artist's public MusicBrainz ID. It appends only unique local matches after the complete local ranking; it never replaces or reorders local results.
 3. **Local-library match required:** fallback recordings must match a local track by MusicBrainz recording ID and must not already be in the local chart. Remote-only songs are never shown.
 4. **Safe fallback chain:** Artist Pulse uses ListenBrainz artist-page JSON first, then its documented popularity API, then a stale cached response if the service is temporarily unavailable.
+
+## Similar Artists
+
+When ListenBrainz is enabled, Artist Pulse also adds up to 12 related artists at the bottom of an artist page. It requests ListenBrainz artist-page JSON first and falls back to its public artist-radio API. A recommendation is rendered only when its MusicBrainz artist ID exactly matches an artist in the visible Jellyfin library; every card opens that local artist and uses Jellyfin's existing primary image. Remote-only artists and remote artwork are never shown.
+
+The collection replaces Jellyfin Web's **More Like This** section for music artists. It uses a full-width circular carousel with previous/next controls, matching the Movie Cast & Crew experience while leaving the artist-page heading aligned with the music layout.
 
 The result is useful on day one, and becomes more representative as Jellyfin server play history grows.
 
@@ -80,7 +87,7 @@ Detailed local, Docker, and manual-install instructions are in [docs/INSTALLATIO
 | Split Singles from Albums | On | Shows Singles/EPs in their own section. |
 | Single maximum track count | 3 | Part of the fallback heuristic for releases without type metadata. |
 | Single maximum duration | 30 minutes | Prevents long short-track albums being classified as singles. |
-| Use ListenBrainz to complete local Top Songs | On | Appends unique, locally playable public-popularity matches after local ranked tracks when fewer than 50 tracks are available. |
+| Use ListenBrainz for Top Songs and Similar Artists | On | Appends unique, locally playable public-popularity matches after local ranked tracks when fewer than 50 tracks are available, and supplies cached similar-artist recommendations. |
 | ListenBrainz cache | 24 hours | Fresh-cache lifetime. Stale cache remains available during outages. |
 
 Top Songs always begins with 12 rows, then expands on demand. This guarantees a consistent artist-page layout for every user.
@@ -101,10 +108,12 @@ Read the full [privacy and network behaviour](docs/PRIVACY.md).
 
 | Symptom | Check |
 | --- | --- |
-| No Top Songs or Singles section | Ensure File Transformation is installed, restart Jellyfin, run **Artist Pulse Web Integration**, then hard-refresh the browser. |
+| No Artist Pulse section | Ensure File Transformation is installed, restart Jellyfin, run **Artist Pulse Web Integration**, then hard-refresh the browser. |
 | Startup task says File Transformation is missing | Install a File Transformation release compatible with your Jellyfin version. |
 | Fallback section is empty | Confirm the artist has a MusicBrainz artist ID and local tracks have recording MBIDs. Artist Pulse intentionally excludes unavailable remote recordings. |
 | Singles are still inside Albums | Refresh metadata first; otherwise tune the release track-count and duration heuristic. |
+| Similar Artists are absent | Confirm ListenBrainz is enabled, the source artist has a MusicBrainz artist ID, and at least one recommended artist exists locally with the same MusicBrainz artist ID. |
+| Similar Artist arrows are disabled | All matching cards already fit in the viewport. The arrows activate only when additional cards are off-screen. |
 | Old layout remains | Clear browser cache / hard-refresh after plugin or Jellyfin Web updates. |
 
 For diagnostics and logs, see [docs/INSTALLATION.md#troubleshooting](docs/INSTALLATION.md#troubleshooting).
