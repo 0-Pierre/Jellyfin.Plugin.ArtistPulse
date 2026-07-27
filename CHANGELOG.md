@@ -5,6 +5,7 @@
 - Preserve each last-known-good ListenBrainz component when a subsequent lookup is partial or fails, so cached Top Songs, release types, and Similar Artists remain available during an outage.
 - Serve a useful stale cache immediately when the ListenBrainz artist-page request returns no data instead of walking every fallback endpoint first.
 - Refresh the README with current artist-page, Albums/Singles, and Similar Artists screenshots.
+- Package the release with only the runtime DLL and dependency manifest; debug symbols are not required by Jellyfin and are omitted from the distributable ZIP.
 
 ## [1.0.13] - 2026-07-27
 

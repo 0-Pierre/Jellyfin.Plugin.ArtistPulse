@@ -10,11 +10,11 @@
     "versions": [
       {
         "version": "1.0.14",
-        "changelog": "Preserve last-known-good ListenBrainz cache data during outages and add current artist-page screenshots to the documentation.",
+        "changelog": "Preserve last-known-good ListenBrainz cache data during outages, add current artist-page screenshots, and ship a runtime-only ZIP.",
         "targetAbi": "10.11.11.0",
         "sourceUrl": "https://github.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/releases/download/v1.0.14/ArtistPulse_1.0.14.zip",
-        "checksum": "29604D791772AE4F8CC9216CE08D6F37",
-        "timestamp": "2026-07-27T20:36:51Z",
+        "checksum": "5CAFAD548DDB2FC60DDD84626E3DC4FC",
+        "timestamp": "2026-07-27T20:42:00Z",
         "dependencies": [
           "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
         ]
