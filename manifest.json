@@ -9,6 +9,17 @@
     "imageUrl": "https://raw.githubusercontent.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/main/assets/artist-pulse-preview.png",
     "versions": [
       {
+        "version": "1.1.0",
+        "changelog": "Rebuild Artist Pulse for Jellyfin 12.0 on .NET 10 with ABI 12.0.0.0.",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/releases/download/v1.1.0/ArtistPulse_1.1.0.zip",
+        "checksum": "6E7A4907B2F4A6BFBC60F2C7C4500886",
+        "timestamp": "2026-09-08T00:00:00Z",
+        "dependencies": [
+          "5e87cc92-571a-4d8d-8d98-d2d4147f9f90"
+        ]
+      },
+      {
         "version": "1.0.14",
         "changelog": "Preserve last-known-good ListenBrainz cache data during outages, add current artist-page screenshots, and ship a runtime-only ZIP.",
         "targetAbi": "10.11.11.0",
