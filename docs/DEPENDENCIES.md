@@ -14,8 +14,8 @@ https://raw.githubusercontent.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/main/mani
 
 ### Jellyfin Server
 
-- **Supported line:** Jellyfin `10.11.x`
-- **Built and tested against:** `10.11.11`
+- **Supported line:** Jellyfin `12.0.x`
+- **Built and tested against:** `12.0.0`
 - **Project:** <https://github.com/jellyfin/jellyfin>
 - **Releases:** <https://github.com/jellyfin/jellyfin/releases>
 

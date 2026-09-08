@@ -11,7 +11,7 @@ Thanks for helping improve Artist Pulse.
 
 ## Development
 
-1. Install the .NET SDK required by the project and use Jellyfin `10.11.x` development dependencies.
+1. Install the .NET 10 SDK and use Jellyfin `12.0.x` development dependencies.
 2. Build:
 
    ```powershell

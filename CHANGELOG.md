@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.0] - 2026-09-08
+
+- Rebuild for Jellyfin 12.0 with .NET 10, `Jellyfin.Controller` 12.0.0, `Jellyfin.Model` 12.0.0, and target ABI `12.0.0.0`.
+- Update the CI runtime and compatibility documentation for the Jellyfin 12.0 server line.
+
 ## [1.0.14] - 2026-07-27
 
 - Preserve each last-known-good ListenBrainz component when a subsequent lookup is partial or fails, so cached Top Songs, release types, and Similar Artists remain available during an outage.

@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-7c3aed?style=flat-square" alt="GPL-3.0-or-later" /></a>
   <a href="https://github.com/0-Pierre/Jellyfin.Plugin.ArtistPulse/releases"><img src="https://img.shields.io/github/v/release/0-Pierre/Jellyfin.Plugin.ArtistPulse?display_name=release&style=flat-square" alt="Latest release" /></a>
-  <a href="https://github.com/jellyfin/jellyfin/releases"><img src="https://img.shields.io/badge/Jellyfin-10.11.x-00a4dc?style=flat-square" alt="Jellyfin 10.11.x" /></a>
+  <a href="https://github.com/jellyfin/jellyfin/releases"><img src="https://img.shields.io/badge/Jellyfin-12.0.x-00a4dc?style=flat-square" alt="Jellyfin 12.0.x" /></a>
 </p>
 
 > Jellyfin users have been asking for most-played tracks directly on artist pages for a long time. [Feature request #1228](https://features.jellyfin.org/posts/1228/add-most-played-tracks-to-artist-window) captures that missing music-page experience. **Artist Pulse solves it today as an opt-in plugin**: no core fork, no modified `jellyfin-web` files, and no external service required for the local server-wide chart.
@@ -65,7 +65,7 @@ The queue uses only tracks returned by your own Jellyfin server. It never attemp
 
 | Dependency | Why it is needed | Install / details |
 | --- | --- | --- |
-| [Jellyfin Server 10.11.x](https://github.com/jellyfin/jellyfin/releases) | Server API and Jellyfin Web compatibility | Keep the plugin version aligned with your Jellyfin release. |
+| [Jellyfin Server 12.0.x](https://github.com/jellyfin/jellyfin/releases) | Server API and Jellyfin Web compatibility | Install an Artist Pulse release built for Jellyfin 12.0. |
 | [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) | Safely injects the Artist Pulse Web asset references into the served `index.html` | Add its [plugin repository manifest](https://www.iamparadox.dev/jellyfin/plugins/manifest.json), install it, then restart Jellyfin. |
 | Music metadata with MusicBrainz IDs | Enables ListenBrainz fallback matching and accurate Album/Single/EP classification | Recommended: artist MBID, recording MBIDs, and release-group IDs. |
 | [ListenBrainz](https://listenbrainz.org/) *(optional)* | Public popularity fallback only | No account, token, or scrobbling setup is required. |
