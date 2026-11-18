@@ -292,9 +292,6 @@
 
         renderTopSongs: function (data, anchorContainer, placement) {
             var existing = document.querySelector('.artistInsightsTopSongs');
-            if (existing && existing.getAttribute('data-artist-insights-placement') === placement) {
-                return;
-            }
             if (existing) {
                 existing.remove();
             }
@@ -705,7 +702,8 @@
         sectionForTitle: function (title) {
             var titles = Array.prototype.slice.call(document.querySelectorAll('.sectionTitle, h1, h2, h3'));
             var heading = titles.find(function (element) {
-                return !element.closest('[data-artist-insights]') && element.textContent.trim().toLowerCase() === title.toLowerCase();
+                //the anchor should be in a visible section
+                return !element.closest('.hide') && !element.closest('[data-artist-insights]') && element.textContent.trim().toLowerCase() === title.toLowerCase();
             });
             if (!heading) {
                 return null;
